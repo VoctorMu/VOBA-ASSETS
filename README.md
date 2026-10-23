@@ -43,7 +43,7 @@ Every setup that passes the checklist gets a **quality score from 0 to 100**:
 |---|---|
 | 20 (5 if flat) | Weekly trend agrees with the Daily |
 | up to 40 | Confluence: M/W or H&S (+20, +5 for a second pattern), RSI divergence (+15) |
-| up to 15 | How tight the AMD range was (a tighter coil is a cleaner spring) |
+| up to 15 | How tight the AMD range was (a tighter coil is a cleaner spring; 3.5 ATR or wider earns 0) |
 | 5 | The AMD break candle closed well beyond the range |
 | 10 | Pattern and AMD confirmed on the same candle |
 | up to 10 | A sensible stop size (≤3 ATR full points, 8 ATR or more none) |
@@ -84,7 +84,8 @@ before you rely on them.
 
 **More setups per week** needs a wider net, and each step also lets in lower-quality trades:
 `strategy.setup_window` (how many 4H candles ago a pattern may be: now 30 = 5 days),
-`strategy.amd.max_range_atr` (looser accumulation ranges), or a lower `min_score`.
+`strategy.amd.max_range_atr` (how tall the accumulation range may be: now 4.5 ATR; going higher found almost
+nothing extra in testing), or a lower `min_score`.
 
 ## Risk management
 

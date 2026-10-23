@@ -28,6 +28,7 @@ from .structure import htf_bias
 from .swings import Swing, find_swings
 
 MIN_H4_BARS = 120
+TIGHT_RANGE_ATR = 3.5   # score reference: ranges this wide or wider earn no "tight range" points
 
 
 @dataclass
@@ -147,9 +148,8 @@ def score_signal(weekly_agrees: bool, pats: list[Pattern], divs: list[Divergence
     labels = [p.label for p in pats] + (["RSI divergence"] if divs else [])
     parts.append((min(setup, 40), " + ".join(labels)))
 
-    max_h = scfg["amd"]["max_range_atr"]
-    height = (amd.range_high - amd.range_low) / atr_range if atr_range > 0 else max_h
-    parts.append((round(15 * _clamp01((max_h - height) / max_h)), f"AMD range {height:.1f} ATR tight"))
+    height = (amd.range_high - amd.range_low) / atr_range if atr_range > 0 else TIGHT_RANGE_ATR
+    parts.append((round(15 * _clamp01((TIGHT_RANGE_ATR - height) / TIGHT_RANGE_ATR)), f"AMD range {height:.1f} ATR tight"))
 
     beyond = (close - amd.range_high) if amd.direction > 0 else (amd.range_low - close)
     if atr_now > 0 and beyond >= 0.3 * atr_now:

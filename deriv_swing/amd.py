@@ -30,32 +30,23 @@ def _amd_ending_at(d, o, h, lo, c, atr_v, cfg) -> AMD | None:
         a = atr_v[m - 1]
         if np.isnan(a) or a <= 0:
             continue
-        # Longest tight range that ends right before the sweep candle.
-        best = None
-        for length in range(acfg["min_range_bars"], acfg["max_range_bars"] + 1):
+        # Tight ranges that end right before the sweep candle, longest first. The longest one
+        # can reach back below (or above) the sweep, so shorter ones get a turn too.
+        for length in range(acfg["max_range_bars"], acfg["min_range_bars"] - 1, -1):
             start = m - length
             if start < 0:
-                break
+                continue
             rh, rl = h[start:m].max(), lo[start:m].min()
-            if rh - rl <= acfg["max_range_atr"] * a:
-                best = (start, rh, rl)
-        if best is None:
-            continue
-        start, rh, rl = best
-        between = c[m + 1:d]
-        for direction in (1, -1):
-            if direction == 1:
-                swept = lo[m] < rl and rl <= c[m] <= rh
-                held = bool(np.all((between >= rl) & (between <= rh)))
-                broke = c[d] > rh
-                extreme = float(lo[m:d + 1].min())
-            else:
-                swept = h[m] > rh and rl <= c[m] <= rh
-                held = bool(np.all((between >= rl) & (between <= rh)))
-                broke = c[d] < rl
-                extreme = float(h[m:d + 1].max())
-            if swept and held and broke:
-                return AMD(direction, start, m - 1, float(rh), float(rl), m, extreme, d)
+            if rh - rl > acfg["max_range_atr"] * a:
+                continue
+            between = c[m + 1:d]
+            held = bool(np.all((between >= rl) & (between <= rh)))
+            if not held:
+                continue
+            if lo[m] < rl and rl <= c[m] <= rh and c[d] > rh:
+                return AMD(1, start, m - 1, float(rh), float(rl), m, float(lo[m:d + 1].min()), d)
+            if h[m] > rh and rl <= c[m] <= rh and c[d] < rl:
+                return AMD(-1, start, m - 1, float(rh), float(rl), m, float(h[m:d + 1].max()), d)
     return None
 
 

@@ -132,3 +132,38 @@ def test_setup_window_five_days():
     assert not analyse("X", df, df, df, c).patterns
     c["strategy"]["setup_window"] = 30
     assert [p.name for p in analyse("X", df, df, df, c).patterns] == ["double_top"]
+
+
+def test_score_independent_of_amd_range_limit():
+    import copy
+
+    from deriv_swing.amd import AMD
+    from deriv_swing.strategy import score_signal
+    amd = AMD(1, 0, 10, 104.0, 100.0, 11, 98.0, 14)
+    loose = copy.deepcopy(S)
+    loose["amd"]["max_range_atr"] = 6.0
+    args = (True, [], [object()], amd, False, 104.5, 97.0, 2.0, 2.0)
+    assert score_signal(*args, S) == score_signal(*args, loose)
+
+
+def test_looser_amd_range_finds_wider_coil():
+    import copy
+    # slow drift up to 104 and back: a coil about 4.6 ATR wide, then sweep below, hold, break above
+    df = candles(list(path([(0, 100), (30, 100), (6, 104), (6, 100)])))
+    for o, h, lo, c in [(100.0, 100.5, 98.5, 100.6), (100.6, 101.2, 100.3, 101.0), (101.0, 106.2, 100.8, 106.0)]:
+        df.loc[len(df)] = [df["time"].iloc[-1] + 14400, o, h, lo, c]
+    a = atr(df, 14)
+    loose = copy.deepcopy(S)
+    loose["amd"]["max_range_atr"] = 6.0
+    assert find_amd(df, a, S, 12) == []
+    found = find_amd(df, a, loose, 12)
+    assert len(found) == 1 and found[0].direction == 1 and found[0].manip_extreme == 98.5
+
+
+def test_amd_tries_shorter_range_when_longest_reaches_below_sweep():
+    # price drifted up into the range, so the longest "tight" window reaches back below the sweep wick
+    df = candles(list(path([(0, 95), (20, 95), (12, 100)])) + [101, 100.5, 101.5, 100.8, 101.2, 100.6, 101.4, 101.0])
+    for o, h, lo, c in [(101.0, 101.3, 99.6, 100.9), (100.9, 101.5, 100.5, 101.2), (101.2, 104.0, 101.0, 103.8)]:
+        df.loc[len(df)] = [df["time"].iloc[-1] + 14400, o, h, lo, c]
+    found = find_amd(df, atr(df, 14), S, 12)
+    assert found and found[0].direction == 1 and found[0].range_low > 99.6

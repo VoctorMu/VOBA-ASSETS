@@ -62,7 +62,7 @@ strategy:
     lookback: 60              # 4H bars searched for the accumulation range
     min_range_bars: 6
     max_range_bars: 30
-    max_range_atr: 3.5        # accumulation range must be this tight
+    max_range_atr: 4.5        # accumulation range may be up to 4.5 ATR tall (was 3.5)
     max_bars_to_break: 12     # distribution must follow the sweep within N bars
     recent_bars: 12           # the AMD break must be within the last 12 candles (2 days)
   htf:
