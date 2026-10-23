@@ -74,7 +74,7 @@ def test_no_divergence_when_momentum_confirms():
 
 def _amd_frame(break_close=105.0, sweep_close=100.8):
     df = candles(list(path([(0, 90), (30, 100)])) + [101, 102, 101.5, 100.5, 101, 102, 101, 100.6, 101.8, 101.2])
-    for o, h, lo, c in [(101.2, 101.5, 97.0, sweep_close), (100.8, 101.6, 100.3, 101.4),
+    for o, h, lo, c in [(101.2, 101.5, min(97.0, sweep_close - 0.5), sweep_close), (100.8, 101.6, 100.3, 101.4),
                         (101.4, max(105.5, break_close), 101.0, break_close)]:
         df.loc[len(df)] = [df["time"].iloc[-1] + 14400, o, h, lo, c]
     return df
@@ -90,7 +90,7 @@ def test_amd_range_sweep_break():
 
 
 def test_amd_needs_close_back_inside():
-    df = _amd_frame(sweep_close=97.5)   # sweep candle closes below the range: a real breakdown, not a stop hunt
+    df = _amd_frame(sweep_close=94.0)   # sweep candle closes below the range: a real breakdown, not a stop hunt
     assert not [a for a in find_amd(df, atr(df, 14), S, 12) if a.direction == 1]
 
 
