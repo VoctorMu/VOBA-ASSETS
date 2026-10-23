@@ -1,7 +1,8 @@
 """Combines the building blocks into a trade decision for the latest closed 4H candle.
 
 Rules (all must hold):
-  1. Daily and Weekly bias agree -> that is the only direction allowed.
+  1. The Daily bias sets the direction. The Weekly must not point against it (htf.weekly:
+     "not_against", the default) or must agree with it (htf.weekly: "agree").
   2. A recent 4H setup in that direction: M/W or (inverse) head & shoulders neckline break,
      OR regular RSI(14) divergence.
   3. A recent completed AMD (range -> sweep -> close beyond the far side) in that direction.
@@ -9,6 +10,9 @@ Rules (all must hold):
      neckline-break close. Nothing fires on a stale setup.
 Stop: beyond the AMD sweep extreme (and beyond the pattern's invalidation if a pattern is used),
 plus a small ATR buffer. Target: reward_risk x the stop distance.
+
+Every signal also gets a 0-100 quality score (see score_signal). The engine trades only signals
+above selection.min_score, at most selection.max_trades_per_week.
 """
 from __future__ import annotations
 
@@ -35,6 +39,8 @@ class Signal:
     stop: float
     setup_id: str
     reasons: list[str]
+    score: int = 0
+    score_parts: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -75,10 +81,14 @@ def analyse(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame, c
                       if d.confirm_idx >= last - window]
     an.amds = find_amd(h4, atr_s, scfg, window)
 
-    if an.bias_d1 == 0 or an.bias_d1 != an.bias_w1:
-        an.status = "Daily and Weekly not aligned - standing aside"
-        return an
     direction = an.bias_d1
+    if direction == 0:
+        an.status = "Daily trend unclear - standing aside"
+        return an
+    weekly_rule = scfg["htf"].get("weekly", "not_against")
+    if an.bias_w1 == -direction or (weekly_rule == "agree" and an.bias_w1 != direction):
+        an.status = "Weekly trend against the Daily - standing aside"
+        return an
     side = "bullish" if direction > 0 else "bearish"
 
     pats = [p for p in an.patterns if p.direction == direction]
@@ -105,10 +115,50 @@ def analyse(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame, c
         an.status = "Price already beyond the invalidation level"
         return an
 
-    reasons = [f"Daily + Weekly {side}"] + [p.label for p in pats] + [d.label for d in divs]
+    htf_txt = f"Daily + Weekly {side}" if an.bias_w1 == direction else f"Daily {side}, Weekly neutral"
+    reasons = [htf_txt] + [p.label for p in pats] + [d.label for d in divs]
     reasons.append("AMD complete (range, sweep, close beyond)")
     setup_time = int(h4["time"].iloc[amd.manip_idx])
+    score, parts = score_signal(an.bias_w1 == direction, pats, divs, amd, pattern_trigger and amd.dist_idx == last,
+                                close, stop, an.atr, float(atr_s.iloc[amd.range_end]), scfg)
     an.signal = Signal(symbol, direction, an.bar_time, close, float(stop),
-                       f"{symbol}|{direction}|{setup_time}", reasons)
-    an.status = f"SIGNAL: {'BUY' if direction > 0 else 'SELL'}"
+                       f"{symbol}|{direction}|{setup_time}", reasons, score, parts)
+    an.status = f"SIGNAL: {'BUY' if direction > 0 else 'SELL'} (score {score})"
     return an
+
+
+def _clamp01(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def score_signal(weekly_agrees: bool, pats: list[Pattern], divs: list[Divergence], amd: AMD,
+                 double_trigger: bool, close: float, stop: float, atr_now: float, atr_range: float,
+                 scfg: dict) -> tuple[int, list[str]]:
+    """0-100 quality score. Weights are a starting point: check them against your backtest's
+    "score vs result" table and adjust."""
+    parts: list[tuple[int, str]] = []
+    parts.append((20, "Weekly agrees") if weekly_agrees else (5, "Weekly neutral"))
+
+    setup = 0
+    if pats:
+        setup += 20 + (5 if len(pats) > 1 else 0)
+    if divs:
+        setup += 15
+    labels = [p.label for p in pats] + (["RSI divergence"] if divs else [])
+    parts.append((min(setup, 40), " + ".join(labels)))
+
+    max_h = scfg["amd"]["max_range_atr"]
+    height = (amd.range_high - amd.range_low) / atr_range if atr_range > 0 else max_h
+    parts.append((round(15 * _clamp01((max_h - height) / max_h)), f"AMD range {height:.1f} ATR tight"))
+
+    beyond = (close - amd.range_high) if amd.direction > 0 else (amd.range_low - close)
+    if atr_now > 0 and beyond >= 0.3 * atr_now:
+        parts.append((5, "decisive AMD break"))
+    if double_trigger:
+        parts.append((10, "pattern + AMD confirmed on the same candle"))
+
+    stop_atr = abs(close - stop) / atr_now if atr_now > 0 else 99
+    parts.append((round(10 * _clamp01((8 - stop_atr) / 5)), f"stop {stop_atr:.1f} ATR"))
+
+    total = int(sum(p for p, _ in parts))
+    return total, [f"+{p} {txt}" for p, txt in parts if p > 0]

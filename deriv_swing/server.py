@@ -65,6 +65,7 @@ def analysis_json(an: Analysis, bars: int = 300) -> dict:
         } for a in an.amds if a.range_start >= off],
         "signal": None if sig is None else {
             "direction": sig.direction, "close": sig.close, "stop": sig.stop, "reasons": sig.reasons,
+            "score": sig.score, "score_parts": sig.score_parts,
             "setup_id": sig.setup_id,
         },
     }
@@ -128,6 +129,8 @@ def create_app(engine: Engine, cfg: dict, run_engine: bool = True) -> FastAPI:
                     "breakeven": cfg["risk"].get("breakeven", {}),
                 },
                 "whatsapp": engine.notifier.enabled,
+                "selection": {**cfg.get("selection", {}), "trades_this_week": engine.trades_this_week(),
+                              "weekly_rule": cfg["strategy"]["htf"].get("weekly", "not_against")},
                 "symbols": symbols,
             }
 

@@ -28,6 +28,11 @@ symbols:
   - "Volatility 50 (1s) Index"
   - "Volatility 100 (1s) Index"
 
+selection:
+  max_trades_per_week: 2      # Monday-Sunday, UTC
+  min_score: 60               # 0-100 quality bar; calibrate with the backtest's score table
+  notify_watch: true          # WhatsApp "watch" alert for setups below the bar / over the weekly limit
+
 risk:
   risk_per_trade_pct: 2.0     # % of equity lost if the stop is hit
   reward_risk: 5.0            # take profit = 5 x stop distance
@@ -59,6 +64,7 @@ strategy:
     max_range_atr: 3.5        # accumulation range must be this tight
     max_bars_to_break: 12     # distribution must follow the sweep within N bars
   htf:
+    weekly: not_against       # not_against = Daily leads, Weekly may be flat | agree = both must match
     ema_period: 50
     swing_window: 2
   stop_buffer_atr: 0.1        # extra room beyond the structural stop

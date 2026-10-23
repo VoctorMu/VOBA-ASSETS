@@ -68,8 +68,21 @@ def test_backtest_scores_breakeven_exit_as_zero(monkeypatch):
     monkeypatch.setattr(bt, "analyse", fake)
     c = cfg()
     empty = pd.DataFrame({"time": [0], "open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0]})
-    assert [t["R"] for t in bt.run_symbol("X", h4, empty, empty, c, start=5)] == [0.0]
+    assert [t["R"] for t in bt.candidates("X", h4, empty, empty, c, start=5)] == [0.0]
     calls["n"] = 0
     c["risk"]["breakeven"]["enabled"] = False
     h4.loc[8, "low"] = 89.0
-    assert [t["R"] for t in bt.run_symbol("X", h4, empty, empty, c, start=5)] == [-1.0]
+    assert [t["R"] for t in bt.candidates("X", h4, empty, empty, c, start=5)] == [-1.0]
+
+
+def test_backtest_selection_applies_bar_weekly_limit_and_one_per_symbol():
+    from deriv_swing.backtest import select
+    mon = 1_792_454_400                          # a Monday 00:00 UTC
+    c = lambda sym, day, score, exit_day: {"symbol": sym, "time": mon + day * 86400, "score": score,
+                                            "exit_time": mon + exit_day * 86400, "R": 1}
+    cands = [c("A", 0, 90, 1), c("B", 0.5, 40, 2),   # B below the bar
+             c("A", 0.6, 95, 2),                     # A still busy until day 1
+             c("C", 1, 70, 3), c("D", 2, 99, 3),     # D: weekly limit (2) already used
+             c("D", 7, 65, 8)]                       # next week
+    taken = select(cands, 60, 2)
+    assert [(t["symbol"], t["time"]) for t in taken] == [("A", mon), ("C", mon + 86400), ("D", mon + 7 * 86400)]

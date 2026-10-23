@@ -85,7 +85,10 @@ class Engine:
             return
         rcfg = self.cfg["risk"]
         row = dict(setup_id=sig.setup_id, created=self.feed.now(), bar_time=sig.bar_time, symbol=sig.symbol,
-                   direction=sig.direction, stop=sig.stop, reasons=sig.reasons)
+                   direction=sig.direction, stop=sig.stop, reasons=sig.reasons, score=sig.score,
+                   score_parts=sig.score_parts, entry=sig.close,
+                   target=sig.close + sig.direction * self.cfg["risk"]["reward_risk"] * abs(sig.close - sig.stop))
+        sel = self.cfg.get("selection", {})
 
         def reject(why: str):
             log.info("%s rejected: %s", sig.setup_id, why)
@@ -93,8 +96,20 @@ class Engine:
             if self.notifier.notify_rejections:
                 self.notifier.send(f"⏭️ Skipped {_side(sig.direction)} {sig.symbol}\n{why}")
 
+        def watch(why: str):
+            log.info("%s watch: %s", sig.setup_id, why)
+            self.journal.record(**row, status="watch", detail=why)
+            if sel.get("notify_watch", True):
+                self.notifier.send(f"👀 Watch: {_side(sig.direction)} {sig.symbol} (score {sig.score}/100)\n"
+                                   f"Not traded: {why}\n{' · '.join(sig.reasons)}")
+
         if self.paused:
             return reject("engine paused")
+        if sig.score < sel.get("min_score", 0):
+            return watch(f"score {sig.score} is below the bar of {sel['min_score']}")
+        cap = sel.get("max_trades_per_week")
+        if cap and self.trades_this_week() >= cap:
+            return watch(f"already {cap} trades this week")
         if rcfg.get("one_position_per_symbol") and any(
                 p.symbol == sig.symbol for p in self.broker.open_positions()):
             return reject("already holding this symbol")
@@ -139,7 +154,10 @@ class Engine:
             f"{'🟢' if sig.direction > 0 else '🔴'} {_side(sig.direction)} {sig.symbol}\n"
             f"Entry {row['entry']:.2f} · SL {sig.stop:.2f} · TP {target:.2f}\n"
             f"{volume:g} lots · risk {risk_money:.2f} ({rcfg['risk_per_trade_pct']:g}%) · 1:{rcfg['reward_risk']:g}\n"
-            f"{' · '.join(sig.reasons)}{be_txt}")
+            f"Score {sig.score}/100 · {' · '.join(sig.reasons)}{be_txt}")
+
+    def trades_this_week(self) -> int:
+        return self.journal.opened_since(week_start(self.feed.now()))
 
     def _manage_breakeven(self):
         """Move the stop to entry (+lock_r) once a trade has run trigger_r times its initial risk."""
@@ -209,3 +227,9 @@ class Engine:
 
 def _side(direction: int) -> str:
     return "BUY" if direction > 0 else "SELL"
+
+
+def week_start(ts: int) -> int:
+    """Monday 00:00 UTC of the week containing ts (the unix epoch began on a Thursday)."""
+    day = ts // 86400
+    return (day - (day + 3) % 7) * 86400

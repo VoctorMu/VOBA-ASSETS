@@ -17,12 +17,12 @@ Think of it as an airline crew:
 
 ## The strategy
 
-A trade is only taken when **all** of these are true on the latest *closed* 4H candle:
+A setup is only taken when **all** of these are true on the latest *closed* 4H candle:
 
 | # | Check | Detail |
 |---|-------|--------|
-| 1 | **Weekly trend** | Price above the 50 EMA without a lower-high + lower-low structure (bullish), or the mirror image (bearish). |
-| 2 | **Daily trend** | Same test on the Daily chart. Daily and Weekly must **agree**; that is the only direction allowed. |
+| 1 | **Daily trend** sets the direction | Price above the 50 EMA without a lower-high + lower-low structure (bullish), or the mirror image (bearish). |
+| 2 | **Weekly trend** not against it | Same test on the Weekly. It may agree or be flat, but not point the other way. Set `strategy.htf.weekly: agree` to require full agreement. |
 | 3 | **4H setup** in that direction | **M** (double top) / **W** (double bottom), **head & shoulders** / inverse H&S with a close through the neckline, **or** regular **RSI(14) divergence**. Must be recent (within `setup_window` candles). |
 | 4 | **AMD complete** | **A**ccumulation: a tight 4H range. **M**anipulation: a wick sweeps one side of the range and the candle closes back inside (a stop hunt). **D**istribution: a 4H candle *closes* beyond the opposite side. |
 | 5 | **4H close confirmation** | The candle that just closed must be the AMD break or the pattern's neckline break. The engine never chases a setup that confirmed earlier. |
@@ -34,6 +34,57 @@ extreme, the point that would prove the idea wrong.
 **Stop loss:** beyond the AMD sweep extreme. If a pattern was part of the setup, the stop also clears the
 pattern's invalidation point (the right shoulder or the M/W peak). A small ATR buffer is added.
 **Take profit:** 5 × the stop distance (1:5).
+
+### Picking the best 2 a week
+
+Every setup that passes the checklist gets a **quality score from 0 to 100**:
+
+| Points | For |
+|---|---|
+| 20 (5 if flat) | Weekly trend agrees with the Daily |
+| up to 40 | Confluence: M/W or H&S (+20, +5 for a second pattern), RSI divergence (+15) |
+| up to 15 | How tight the AMD range was (a tighter coil is a cleaner spring) |
+| 5 | The AMD break candle closed well beyond the range |
+| 10 | Pattern and AMD confirmed on the same candle |
+| up to 10 | A sensible stop size (≤3 ATR full points, 8 ATR or more none) |
+
+The bot **auto-trades only setups scoring at least `selection.min_score` (60), and at most
+`selection.max_trades_per_week` (2)** per Monday–Sunday UTC week. Everything else is logged as **watch** and
+sent as a 👀 WhatsApp alert, so you can still look at it yourself.
+
+The live bot can't wait until Sunday to see which 2 setups were best, because the entry has to happen at the 4H
+close. It works like an interviewer who must decide on each candidate on the spot: you set the bar using past
+candidates, then the bot takes the first 2 that clear it. **Set the bar from the backtest** (next section).
+
+### Calibrating on real Deriv data
+
+```bat
+python -m deriv_swing.backtest --mt5 --bars 6000
+```
+
+The report shows how many trades a week each score bar would give, and whether higher scores really performed
+better:
+
+```
+Score bar -> trades taken (with the weekly limit and one trade per symbol):
+  bar    /week  trades    win%   avg R   total R
+   50+     0.71      42    23.8%    +0.55     +23.0
+   60+     0.45      27    33.3%    +1.19     +32.0
+...
+Every candidate by score (does a higher score really mean better trades?):
+  score   count    win%   avg R
+   50-59      26    19.2%    +0.27
+   60-69      30    30.0%    +1.10
+```
+
+(These numbers came from the practice data and mean nothing. Use your own.) Pick the bar that gives the number of
+trades a week you want with acceptable results, set `selection.min_score`, and check it again with `--min-score`.
+If higher scores *don't* do better on real data, the score weights in `strategy.py` (`score_signal`) need changing
+before you rely on them.
+
+**More setups per week** needs a wider net, and each step also lets in lower-quality trades:
+`strategy.setup_window` (how many 4H candles ago a pattern may be: 12 = 2 days, 30 = 5 days),
+`strategy.amd.max_range_atr` (looser accumulation ranges), or a lower `min_score`.
 
 ## Risk management
 

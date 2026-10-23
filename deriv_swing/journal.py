@@ -19,6 +19,10 @@ class Journal:
                 entry REAL, stop REAL, target REAL, volume REAL, risk_money REAL,
                 status TEXT, detail TEXT, reasons TEXT, ticket INTEGER
             )""")
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(signals)")}
+        for name, kind in (("score", "INTEGER"), ("score_parts", "TEXT")):
+            if name not in cols:
+                self.db.execute(f"ALTER TABLE signals ADD COLUMN {name} {kind}")
         self.db.commit()
 
     def seen(self, setup_id: str) -> bool:
@@ -27,11 +31,17 @@ class Journal:
 
     def record(self, **row) -> None:
         row["reasons"] = json.dumps(row.get("reasons", []))
+        row["score_parts"] = json.dumps(row.get("score_parts", []))
         cols = ",".join(row)
         with self.lock:
             self.db.execute(f"INSERT OR REPLACE INTO signals ({cols}) VALUES ({','.join('?' * len(row))})",
                             list(row.values()))
             self.db.commit()
+
+    def opened_since(self, since: int) -> int:
+        with self.lock:
+            return self.db.execute("SELECT COUNT(*) FROM signals WHERE status='opened' AND created>=?",
+                                   (since,)).fetchone()[0]
 
     def by_ticket(self, ticket: int) -> dict | None:
         with self.lock:
@@ -46,4 +56,5 @@ class Journal:
             rows = [dict(zip(names, r)) for r in cur.fetchall()]
         for r in rows:
             r["reasons"] = json.loads(r["reasons"] or "[]")
+            r["score_parts"] = json.loads(r["score_parts"] or "[]")
         return rows

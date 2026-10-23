@@ -98,6 +98,8 @@ button { font: inherit; }
 .signal-card dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
 .signal-card dt { color: var(--muted); }
 .signal-card dd { margin: 0; text-align: right; }
+.score-parts { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.score-parts li { padding: 1px 0; }
 .rules { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 13px; }
 .rules b { color: var(--text); }
 .hidden { display: none; }
@@ -109,7 +111,7 @@ button { font: inherit; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { color: var(--muted); font-weight: 500; font-size: 12px; }
-td.pos { color: var(--bull); } td.neg { color: var(--bear); }
+td.pos { color: var(--bull); } td.neg { color: var(--bear); } td.watch { color: var(--amd); }
 td.wrap { white-space: normal; min-width: 220px; color: var(--muted); }
 .empty { color: var(--muted); padding: 16px 10px; }
 .foot { color: var(--muted); font-size: 11.5px; padding: 0 16px 16px; }

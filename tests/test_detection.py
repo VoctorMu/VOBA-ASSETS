@@ -97,3 +97,27 @@ def test_amd_needs_close_back_inside():
 def test_amd_needs_distribution_close():
     df = _amd_frame(break_close=102.0)  # never closes above the range
     assert not [a for a in find_amd(df, atr(df, 14), S, 12) if a.direction == 1]
+
+
+def test_weekly_rule_not_against(monkeypatch):
+    import deriv_swing.strategy as st
+    c = cfg()
+    df = candles(path([(0, 100), (150, 120)]))
+    for d1, w1, rule, blocked in [(1, 0, "not_against", False), (1, -1, "not_against", True),
+                                  (1, 0, "agree", True), (0, 1, "not_against", True)]:
+        biases = iter([d1, w1])
+        monkeypatch.setattr(st, "htf_bias", lambda *a, **k: next(biases))
+        c["strategy"]["htf"]["weekly"] = rule
+        an = st.analyse("X", df, df, df, c)
+        assert ("standing aside" in an.status) == blocked, (d1, w1, rule, an.status)
+
+
+def test_score_rewards_confluence():
+    from deriv_swing.amd import AMD
+    from deriv_swing.strategy import score_signal
+    amd = AMD(1, 0, 10, 104.0, 100.0, 11, 98.0, 14)
+    weak, _ = score_signal(False, [], [object()], amd, False, 104.1, 97.0, 2.0, 2.0, S)
+    strong, parts = score_signal(True, [type("P", (), {"label": "W"})()], [object()], amd, True,
+                                 105.0, 97.8, 2.0, 2.0, S)
+    assert 0 <= weak < strong <= 100
+    assert any("Weekly agrees" in p for p in parts) and any("same candle" in p for p in parts)

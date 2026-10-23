@@ -118,18 +118,23 @@ function drawAnalysis(an, rr) {
 function biasWord(b) { return b > 0 ? "Bullish" : b < 0 ? "Bearish" : "Unclear"; }
 
 function renderChecklist(an, rr) {
-  const dir = an.bias_d1 !== 0 && an.bias_d1 === an.bias_w1 ? an.bias_d1 : 0;
+  const sel = lastStatus?.selection || {};
+  const strictWeekly = sel.weekly_rule === "agree";
+  const weeklyOk = an.bias_d1 !== 0 && (strictWeekly ? an.bias_w1 === an.bias_d1 : an.bias_w1 !== -an.bias_d1);
+  const dir = weeklyOk ? an.bias_d1 : 0;
   const pats = an.patterns.filter((p) => p.direction === dir);
   const divs = an.divergences.filter((d) => d.direction === dir);
   const amds = an.amds.filter((a) => a.direction === dir);
   const items = [
-    [an.bias_w1 !== 0, "Weekly trend", biasWord(an.bias_w1)],
-    [an.bias_d1 !== 0, "Daily trend", biasWord(an.bias_d1)],
-    [dir !== 0, "Timeframes aligned", dir ? `Only ${dir > 0 ? "buys" : "sells"} allowed` : "Standing aside"],
+    [an.bias_d1 !== 0, "Daily trend sets direction", biasWord(an.bias_d1)],
+    [weeklyOk, strictWeekly ? "Weekly agrees" : "Weekly not against it",
+      `${biasWord(an.bias_w1)}${dir ? ` · only ${dir > 0 ? "buys" : "sells"} allowed` : " · standing aside"}`],
     [dir !== 0 && (pats.length + divs.length) > 0, "4H pattern or RSI divergence",
       dir ? ([...pats.map((p) => p.label), ...divs.map((d) => d.label)].join(", ") || "None in trend direction yet") : "–"],
     [dir !== 0 && amds.length > 0, "AMD complete", amds.length ? "Range → sweep → close beyond" : (dir ? "Waiting" : "–")],
     [!!an.signal, "4H close confirmation", an.signal ? "Triggered on the last closed candle" : "Not triggered"],
+    [!!an.signal && an.signal.score >= (sel.min_score ?? 0), "Quality score",
+      an.signal ? `${an.signal.score}/100 (bar ${sel.min_score ?? 0})` : "Scored when a setup triggers"],
   ];
   $("checklist").innerHTML = items.map(([ok, t, d], i) =>
     `<li class="${ok ? "ok" : "no"}"><span class="mark">${ok ? "✓" : i + 1}</span><div><div class="t">${esc(t)}</div><div class="d">${esc(d)}</div></div></li>`).join("");
@@ -140,7 +145,9 @@ function renderChecklist(an, rr) {
   card.classList.remove("hidden");
   card.innerHTML = `<div class="dir ${s.direction > 0 ? "buy" : "sell"}">${dirTxt(s.direction)} ${esc(an.symbol)}</div>
     <dl><dt>Entry (4H close)</dt><dd>${px(s.close)}</dd><dt>Stop loss</dt><dd>${px(s.stop)}</dd>
-    <dt>Take profit</dt><dd>${px(tp)}</dd><dt>Reward : risk</dt><dd>1 : ${rr}</dd></dl>
+    <dt>Take profit</dt><dd>${px(tp)}</dd><dt>Reward : risk</dt><dd>1 : ${rr}</dd>
+    <dt>Score</dt><dd><b>${s.score}</b>/100</dd></dl>
+    <ul class="score-parts">${(s.score_parts || []).map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
     <div class="d" style="margin-top:8px;color:var(--muted);font-size:12px">${s.reasons.map(esc).join(" · ")}</div>`;
 }
 
@@ -152,7 +159,10 @@ function renderRules(st) {
     r.breakeven?.enabled ? `Stop moves to <b>break-even at ${r.breakeven.trigger_r}R</b>` : `Break-even <b>off</b>`,
     `No new trades if today could close worse than <b>-${r.daily_cap_pct}%</b>`,
     `Entries only on a <b>4H close</b> after AMD completes`,
-    `4H setups must match the <b>Daily + Weekly</b> trend`,
+    st.selection?.weekly_rule === "agree" ? `4H setups must match the <b>Daily + Weekly</b> trend`
+      : `4H setups follow the <b>Daily</b> trend; Weekly not against it`,
+    `Only setups scoring <b>${st.selection?.min_score ?? 0}+</b>, max <b>${st.selection?.max_trades_per_week || "∞"}</b> per week
+      (this week: <b>${st.selection?.trades_this_week ?? 0}</b>)`,
   ].map((x) => `<li>${x}</li>`).join("");
 }
 
@@ -211,10 +221,10 @@ function renderTable(data) {
     rows = data.closed.map((c) => [cell(when(c.close_time)), cell(esc(c.symbol)), cell(dirTxt(c.direction), c.direction > 0 ? "pos" : "neg"),
       cell(c.volume), cell(px(c.entry)), cell(px(c.exit)), cell(c.reason.toUpperCase()), pnl(c.profit)]);
   } else {
-    head = ["Time", "Symbol", "Side", "Entry", "SL", "TP", "Lots", "Status", "Why"];
+    head = ["Time", "Symbol", "Side", "Score", "Entry", "SL", "TP", "Lots", "Status", "Why"];
     rows = data.map((s) => [cell(when(s.created)), cell(esc(s.symbol)), cell(dirTxt(s.direction), s.direction > 0 ? "pos" : "neg"),
-      cell(px(s.entry)), cell(px(s.stop)), cell(px(s.target)), cell(s.volume ?? "–"),
-      cell(esc(s.status), s.status === "opened" ? "pos" : "neg"),
+      cell(s.score ?? "–"), cell(px(s.entry)), cell(px(s.stop)), cell(px(s.target)), cell(s.volume ?? "–"),
+      cell(esc(s.status), s.status === "opened" ? "pos" : s.status === "watch" ? "watch" : "neg"),
       cell(esc(s.detail || s.reasons.slice(1).join(" · ")), "wrap")]);
   }
   t.innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${

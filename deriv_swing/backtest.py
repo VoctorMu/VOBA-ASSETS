@@ -6,6 +6,11 @@ Break-even: once a candle reaches trigger_r, the stop moves to entry (+lock_r) f
 so a trade that then reverses scores lock_r (0R by default).
 Results are reported in R so they are independent of account size; the equity curve compounds
 risk_per_trade_pct per trade. Spread, slippage and the daily cap are not modelled.
+
+Two steps: first every candidate setup on every symbol is found and played out on its own; then the
+candidates are replayed in time order through the live selection rules (score bar, trades per week,
+one open trade per symbol). Because the first step keeps every candidate, the report can show what
+each score bar would have produced: that table is how you calibrate selection.min_score.
 """
 from __future__ import annotations
 
@@ -19,18 +24,18 @@ from .data import TF_SECONDS, SyntheticFeed
 from .strategy import analyse
 
 
-def run_symbol(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame, cfg: dict,
+def candidates(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame, cfg: dict,
                start: int = 300, lookback: int = 600) -> list[dict]:
+    """Every signal the strategy produces on this symbol, each played out to SL / break-even / TP."""
     rr = cfg["risk"]["reward_risk"]
     be = cfg["risk"].get("breakeven", {})
-    trades, busy_until, seen = [], -1, set()
+    out, seen = [], set()
     hi, lo = h4["high"].to_numpy(), h4["low"].to_numpy()
+    t = h4["time"].to_numpy()
     d1_close = d1["time"].to_numpy() + TF_SECONDS["D1"]
     w1_close = w1["time"].to_numpy() + TF_SECONDS["W1"]
     for i in range(start, len(h4)):
-        if i <= busy_until:
-            continue
-        now = int(h4["time"].iloc[i]) + TF_SECONDS["H4"]
+        now = int(t[i]) + TF_SECONDS["H4"]
         an = analyse(symbol, h4.iloc[max(0, i + 1 - lookback):i + 1],
                      d1.iloc[:int(np.searchsorted(d1_close, now, side="right"))].tail(400),
                      w1.iloc[:int(np.searchsorted(w1_close, now, side="right"))].tail(200), cfg)
@@ -52,12 +57,48 @@ def run_symbol(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame
             if be.get("enabled") and stop_r < 0 and (best - entry) * d >= be["trigger_r"] * risk:
                 stop_r = be.get("lock_r", 0.0)
                 stop = entry + d * stop_r * risk
-        if result is None:
-            break
-        trades.append({"symbol": symbol, "time": pd.to_datetime(now, unit="s"), "direction": d, "R": result,
-                       "bars": exit_i - i, "reasons": "; ".join(sig.reasons[1:])})
-        busy_until = exit_i
-    return trades
+        if result is None:      # still open at the end of the data
+            continue
+        out.append({"symbol": symbol, "time": now, "exit_time": int(t[exit_i]) + TF_SECONDS["H4"],
+                    "direction": d, "score": sig.score, "R": result, "bars": exit_i - i,
+                    "reasons": "; ".join(sig.reasons[1:])})
+    return out
+
+
+def select(cands: list[dict], min_score: int, per_week: int | None) -> list[dict]:
+    """Replay candidates in time order through the live selection rules."""
+    from .engine import week_start
+
+    taken, busy, weekly = [], {}, {}
+    for c in sorted(cands, key=lambda c: c["time"]):
+        if c["score"] < min_score or busy.get(c["symbol"], 0) > c["time"]:
+            continue
+        wk = week_start(c["time"])
+        if per_week and weekly.get(wk, 0) >= per_week:
+            continue
+        weekly[wk] = weekly.get(wk, 0) + 1
+        busy[c["symbol"]] = c["exit_time"]
+        taken.append(c)
+    return taken
+
+
+def calibration_table(cands: list[dict], weeks: float, per_week: int | None) -> str:
+    rows = []
+    for bar in (0, 40, 50, 60, 70, 80):
+        taken = select(cands, bar, per_week)
+        r = np.array([c["R"] for c in taken]) if taken else np.array([0.0])
+        rows.append(f"  {bar:>3}+   {len(taken) / weeks:6.2f}   {len(taken):5d}   "
+                    f"{(r > 0).mean() * 100 if taken else 0:5.1f}%   {r.mean() if taken else 0:+6.2f}   "
+                    f"{r.sum() if taken else 0:+7.1f}")
+    head = f"  bar    /week  trades    win%   avg R   total R   (max {per_week or 'no limit'} per week)"
+    buckets = []
+    for lo_, hi_ in ((0, 40), (40, 50), (50, 60), (60, 70), (70, 80), (80, 101)):
+        b = np.array([c["R"] for c in cands if lo_ <= c["score"] < hi_])
+        if len(b):
+            buckets.append(f"  {lo_:>3}-{min(hi_, 100) - 1:<3}  {len(b):5d}   {(b > 0).mean() * 100:5.1f}%   {b.mean():+6.2f}")
+    return "\n".join(["Score bar -> trades taken (with the weekly limit and one trade per symbol):", head, *rows,
+                      "", "Every candidate by score (does a higher score really mean better trades?):",
+                      "  score   count    win%   avg R", *buckets])
 
 
 def summarise(trades: list[dict], risk_pct: float) -> str:
@@ -86,10 +127,15 @@ def main():
     ap.add_argument("--mt5", action="store_true", help="use MT5 history instead of synthetic data")
     ap.add_argument("--bars", type=int, default=3000, help="4H bars of history per symbol")
     ap.add_argument("--no-breakeven", action="store_true", help="let every trade run to SL or TP")
+    ap.add_argument("--min-score", type=int, help="override selection.min_score")
+    ap.add_argument("--per-week", type=int, help="override selection.max_trades_per_week (0 = no limit)")
     args = ap.parse_args()
     cfg = load_config(args.config)
     if args.no_breakeven:
         cfg["risk"]["breakeven"]["enabled"] = False
+    sel = cfg["selection"]
+    min_score = sel["min_score"] if args.min_score is None else args.min_score
+    per_week = sel["max_trades_per_week"] if args.per_week is None else args.per_week
     symbols = args.symbols or cfg["symbols"]
 
     if args.mt5:
@@ -107,14 +153,23 @@ def main():
                   for s in symbols}
         frames = {s: (h.tail(args.bars).reset_index(drop=True), d, w) for s, (h, d, w) in frames.items()}
 
-    all_trades = []
+    cands = []
     for s in symbols:
-        trades = run_symbol(s, *frames[s], cfg)
-        all_trades += trades
-        print(f"\n== {s}\n{summarise(trades, cfg['risk']['risk_per_trade_pct'])}")
-    print(f"\n== ALL SYMBOLS\n{summarise(all_trades, cfg['risk']['risk_per_trade_pct'])}")
-    if all_trades:
-        print("\n" + pd.DataFrame(all_trades).sort_values("time").tail(15).to_string(index=False))
+        found = candidates(s, *frames[s], cfg)
+        print(f"{s}: {len(found)} candidate setups", flush=True)
+        cands += found
+    weeks = max(1.0, max(len(frames[s][0]) - 300 for s in symbols) / 42)   # 4H bars, 24/7 market
+    taken = select(cands, min_score, per_week)
+    risk_pct = cfg["risk"]["risk_per_trade_pct"]
+    print(f"\n== {weeks:.0f} weeks · {len(cands)} candidates ({len(cands) / weeks:.2f}/week before selection)")
+    print(calibration_table(cands, weeks, per_week))
+    print(f"\n== Your settings: score >= {min_score}, max {per_week or 'unlimited'}/week -> "
+          f"{len(taken) / weeks:.2f} trades/week")
+    print(summarise(taken, risk_pct))
+    if taken:
+        df = pd.DataFrame(taken).sort_values("time")
+        df["time"] = pd.to_datetime(df["time"], unit="s")
+        print("\n" + df.drop(columns=["exit_time"]).tail(15).to_string(index=False))
 
 
 if __name__ == "__main__":

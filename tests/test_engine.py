@@ -25,16 +25,17 @@ class FakeFeed:
         return self.t
 
 
-def make_engine(tmp_path, monkeypatch, signal_for=SYMS):
+def make_engine(tmp_path, monkeypatch, signal_for=SYMS, score=100, selection=None):
     c = cfg()
     c["symbols"] = SYMS
+    c["selection"] = selection or {"min_score": 0, "max_trades_per_week": 0, "notify_watch": True}
     feed = FakeFeed()
     broker = PaperBroker(feed, 10_000, tmp_path / "paper.json")
 
     def fake_analyse(symbol, h4, d1, w1, cfg):
         an = Analysis(symbol, int(h4["time"].iloc[-1]), 1, 1, status="test")
         if symbol in signal_for:
-            an.signal = Signal(symbol, 1, an.bar_time, 1000.0, 990.0, f"{symbol}|1|1", ["test"])
+            an.signal = Signal(symbol, 1, an.bar_time, 1000.0, 990.0, f"{symbol}|1|{an.bar_time}", ["test"], score)
         return an
 
     monkeypatch.setattr(engine_mod, "analyse", fake_analyse)
@@ -219,3 +220,41 @@ def test_whatsapp_payload_to_every_recipient(monkeypatch):
     assert posted[0]["template"] == {"name": "trade_alert", "language": {"code": "en"}, "components": [
         {"type": "body", "parameters": [{"type": "text", "text": "BUY V75"}]}]}
     assert posted[0]["messaging_product"] == "whatsapp" and posted[0]["type"] == "template"
+
+
+def test_low_score_is_watch_only(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch, signal_for=SYMS[:1], score=45,
+                              selection={"min_score": 60, "max_trades_per_week": 2, "notify_watch": True})
+    sent = with_alerts(eng)
+    eng.step()
+    assert broker.open_positions() == []
+    row = eng.journal.recent()[0]
+    assert row["status"] == "watch" and "45" in row["detail"]
+    assert sent.msgs and sent.msgs[0].startswith("👀 Watch") and "score 45/100" in sent.msgs[0]
+
+
+def test_weekly_cap_two_trades(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch, signal_for=SYMS[:1], score=80,
+                              selection={"min_score": 60, "max_trades_per_week": 2})
+    eng.cfg["risk"]["breakeven"]["enabled"] = False
+    for _ in range(3):                                   # three new setups, same week
+        eng.feed.df = eng.feed.df.assign(time=eng.feed.df["time"] + 14400)
+        eng.feed.t += 14400
+        eng.step()
+        broker.close_all()
+        eng.set_paused(False)
+    statuses = [r["status"] for r in sorted(eng.journal.recent(), key=lambda r: r["created"])]
+    assert statuses == ["opened", "opened", "watch"]
+    assert eng.trades_this_week() == 2
+    eng.feed.t += 7 * 86400                               # next week: allowed again
+    assert eng.trades_this_week() == 0
+
+
+def test_week_start_is_monday_utc():
+    from datetime import datetime, timezone
+
+    from deriv_swing.engine import week_start
+    thu = int(datetime(2026, 10, 22, 15, tzinfo=timezone.utc).timestamp())
+    assert datetime.fromtimestamp(week_start(thu), timezone.utc) == datetime(2026, 10, 19, tzinfo=timezone.utc)
+    mon = int(datetime(2026, 10, 19, tzinfo=timezone.utc).timestamp())
+    assert week_start(mon) == mon
