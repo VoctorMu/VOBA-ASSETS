@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deriv Swing</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◆</span>
+    <div>
+      <div class="name">Deriv Swing</div>
+      <div class="sub">4H swing engine · V75 &amp; Volatility indices</div>
+    </div>
+  </div>
+  <div class="badges" id="badges"></div>
+  <div class="account">
+    <div class="kv"><span>Balance</span><b id="balance">–</b></div>
+    <div class="kv"><span>Equity</span><b id="equity">–</b></div>
+    <div class="kv cap">
+      <span>Today vs <em id="capLabel">-6%</em> cap</span>
+      <div class="meter"><div id="capFill"></div></div>
+      <b id="dayLoss">0.00%</b>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="pauseBtn" class="btn">Pause</button>
+    <button id="killBtn" class="btn danger" title="Close every bot position and pause">Close all</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel watch">
+    <h2>Watchlist <small>D · W bias</small></h2>
+    <ul id="watchlist"></ul>
+  </aside>
+
+  <section class="panel chartpanel">
+    <div class="chart-head">
+      <h2 id="chartTitle">–</h2>
+      <div id="chartStatus" class="status-pill">waiting for data</div>
+    </div>
+    <div id="chart" class="chart"></div>
+    <div class="rsi-label">RSI 14</div>
+    <div id="rsiChart" class="rsi"></div>
+    <div class="legend">
+      <span><i class="sw bull"></i>Bullish pattern</span>
+      <span><i class="sw bear"></i>Bearish pattern</span>
+      <span><i class="sw neck"></i>Neckline</span>
+      <span><i class="sw amd"></i>AMD range</span>
+      <span><i class="sw div"></i>RSI divergence</span>
+    </div>
+  </section>
+
+  <aside class="panel side">
+    <h2>Setup checklist</h2>
+    <ol id="checklist" class="checklist"></ol>
+    <div id="signalCard" class="signal-card hidden"></div>
+    <h2>Risk rules</h2>
+    <ul class="rules" id="rules"></ul>
+  </aside>
+
+  <section class="panel bottom">
+    <div class="tabs">
+      <button class="tab active" data-tab="open">Open positions</button>
+      <button class="tab" data-tab="closed">Closed trades</button>
+      <button class="tab" data-tab="signals">Signal log</button>
+    </div>
+    <div class="tablewrap"><table id="table"></table></div>
+  </section>
+</main>
+<footer class="foot">Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>. Trading synthetic indices carries a high risk of loss.</footer>
+
+<script src="/static/lightweight-charts.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+# Copy to config.yaml and edit. Never commit config.yaml (it holds your MT5 password).
+
+# paper = simulate fills locally (safe). mt5 = send real orders to the logged-in MT5 account.
+# Start on paper or an MT5 *demo* login, and switch to live only after you trust it.
+execution: paper
+
+# mt5 = live candles from the MetaTrader 5 terminal (Windows only).
+# synthetic = random-walk candles so the app can run anywhere for testing.
+data_source: synthetic
+
+mt5:
+  path: "C:\\Program Files\\Deriv MT5 Terminal\\terminal64.exe"  # optional
+  login: 0
+  password: ""
+  server: "Deriv-Demo"   # e.g. Deriv-Demo, Deriv-Server, Deriv-Server-02
+  magic: 750075          # tags this bot's orders so it only manages its own trades
+  deviation_points: 200
+
+symbols:
+  - "Volatility 75 Index"
+  - "Volatility 75 (1s) Index"
+  - "Volatility 10 Index"
+  - "Volatility 25 Index"
+  - "Volatility 50 Index"
+  - "Volatility 100 Index"
+  - "Volatility 10 (1s) Index"
+  - "Volatility 25 (1s) Index"
+  - "Volatility 50 (1s) Index"
+  - "Volatility 100 (1s) Index"
+
+risk:
+  risk_per_trade_pct: 2.0     # % of equity lost if the stop is hit
+  reward_risk: 5.0            # take profit = 5 x stop distance
+  daily_loss_cap_pct: 6.0     # no new trades once a stop-out would breach -6% for the day
+  one_position_per_symbol: false
+  paper_starting_balance: 10000
+
+strategy:
+  swing_window: 3             # bars each side to confirm a 4H swing point
+  atr_period: 14
+  rsi_period: 14
+  setup_window: 12            # a pattern/divergence must be this recent (4H bars) to count
+  pattern:
+    peak_tolerance_atr: 0.75  # M/W peaks within this many ATRs are "equal"
+    min_height_atr: 2.0       # pattern must be at least this tall
+    shoulder_tolerance_atr: 1.5
+    hs_stop: right_shoulder   # right_shoulder | head
+  divergence:
+    min_bars: 5
+    max_bars: 60
+  amd:
+    lookback: 60              # 4H bars searched for the accumulation range
+    min_range_bars: 6
+    max_range_bars: 30
+    max_range_atr: 3.5        # accumulation range must be this tight
+    max_bars_to_break: 12     # distribution must follow the sweep within N bars
+  htf:
+    ema_period: 50
+    swing_window: 2
+  stop_buffer_atr: 0.1        # extra room beyond the structural stop
+
+engine:
+  poll_seconds: 30
+  synthetic_speed: 1440        # synthetic data only: 1 real second = 24 simulated minutes
+  h4_bars: 600
+  d1_bars: 400
+  w1_bars: 200
+
+dashboard:
+  host: "127.0.0.1"           # use 0.0.0.0 only together with a token
+  port: 8075
+  token: ""                   # if set, the dashboard asks for it
