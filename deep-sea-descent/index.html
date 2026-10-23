@@ -1,0 +1,1223 @@
+<title>Deep Sea Descent</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: research-bridge console. Live "stream" + bet consoles on the left, instrument tabs on the right; stacks to one thumb-zone column on phones.
+   Single deliberate dark look (studio lighting spec), so no light theme. */
+:root {
+  color-scheme: dark;
+  --abyss: #030712;        /* studio ambient deep blue */
+  --violet: #2e1065;       /* studio ambient violet */
+  --cyan: #06b6d4;         /* control accents */
+  --ink: #dff4f9;
+  --muted: #7f98ab;
+  --panel: #08111f;
+  --panel-2: #0c1830;
+  --line: rgba(6, 182, 212, 0.18);
+  --line-strong: rgba(6, 182, 212, 0.42);
+  --win: #34d399;
+  --alarm: #f43f5e;
+  --amber: #f59e0b;
+  --z-sun: #fcd34d;
+  --z-twi: #38bdf8;
+  --z-mid: #818cf8;
+  --z-aby: #d946ef;
+  --f-display: "Oxanium", "Eurostile", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+html, body { background: var(--abyss); color: var(--ink); }
+body { font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--abyss); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; font-family: var(--f-mono); }
+
+.app {
+  max-width: 1360px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 28px;
+  background:
+    radial-gradient(900px 500px at 30% -10%, color-mix(in srgb, var(--violet) 70%, transparent), transparent 70%);
+}
+
+/* top bar */
+.topbar { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; padding-block: 4px 12px; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { font-family: var(--f-display); font-weight: 800; font-size: 20px; letter-spacing: 0.14em; margin: 0; text-transform: uppercase; }
+.brand h1 span { color: var(--cyan); }
+.brand small { color: var(--muted); font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.06em; }
+@media (max-width: 520px) { .brand { flex-basis: 100%; } .brand h1 { font-size: 17px; } .brand small { display: none; } }
+.meter { display: flex; flex-direction: column; gap: 1px; }
+.meter label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.meter strong { font-family: var(--f-mono); font-weight: 500; font-size: 16px; font-variant-numeric: tabular-nums; }
+.meter.jackpot strong { color: var(--z-aby); }
+.ghost { background: transparent; border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--ink); }
+.ghost:hover { border-color: var(--cyan); }
+.ghost[aria-pressed="true"] { background: color-mix(in srgb, var(--cyan) 18%, transparent); }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.stage-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* stage */
+.stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #050a1c; }
+@media (max-width: 640px) { .stage { aspect-ratio: 4 / 4.2; } }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hud { position: absolute; inset: 0; pointer-events: none; }
+.hud-tl { position: absolute; top: 10px; left: 12px; display: flex; gap: 8px; align-items: center; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.live { display: inline-flex; align-items: center; gap: 6px; color: #fecdd3; background: rgba(244, 63, 94, 0.16); border: 1px solid rgba(244, 63, 94, 0.4); padding: 2px 8px; border-radius: 999px; letter-spacing: 0.1em; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--alarm); animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+.hud-tr { position: absolute; top: 10px; right: 64px; text-align: right; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+@media (max-width: 520px) { .hud-tr { right: 12px; top: 34px; } }
+.zone-pill { font-family: var(--f-display); font-weight: 700; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor; background: rgba(3, 7, 18, 0.55); }
+.readout { font-family: var(--f-mono); font-size: 12px; color: var(--ink); background: rgba(3, 7, 18, 0.55); padding: 2px 8px; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.center { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+#mult { font-family: var(--f-display); font-weight: 800; font-size: clamp(44px, 9vw, 104px); line-height: 1; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; text-shadow: 0 0 24px rgba(6, 182, 212, 0.65), 0 2px 0 rgba(0, 0, 0, 0.6); }
+#mult.crashed { color: var(--alarm); text-shadow: 0 0 28px rgba(244, 63, 94, 0.8), 0 2px 0 rgba(0, 0, 0, 0.6); }
+#mult.idle { color: var(--muted); text-shadow: none; font-size: clamp(30px, 5vw, 56px); }
+#phaseText { font-family: var(--f-display); font-weight: 600; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; background: rgba(3, 7, 18, 0.6); padding: 4px 12px; border-radius: 4px; max-width: 90%; }
+.progress { width: min(320px, 70%); height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--cyan); }
+.surge { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); font-family: var(--f-display); font-weight: 800; letter-spacing: 0.24em; font-size: clamp(14px, 2.4vw, 22px); color: #f0abfc; padding: 6px 16px; border: 1px solid #f0abfc; border-radius: 4px; background: rgba(46, 16, 101, 0.75); white-space: nowrap; }
+.feed { position: absolute; left: 10px; bottom: 10px; display: flex; flex-direction: column-reverse; gap: 6px; max-width: min(360px, 62%); }
+.badge { font-size: 12px; background: rgba(3, 7, 18, 0.78); border: 1px solid var(--line-strong); border-left: 3px solid var(--win); padding: 5px 9px; border-radius: 4px; animation: slidein 0.35s ease-out; }
+.badge b { color: var(--win); font-weight: 600; }
+.badge.jp { border-left-color: var(--z-aby); }
+.badge.jp b { color: var(--z-aby); }
+@keyframes slidein { from { transform: translateX(-16px); opacity: 0; } }
+.emojibar { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 4px; pointer-events: auto; }
+.emojibar button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: rgba(3, 7, 18, 0.6); font-size: 17px; line-height: 1; padding: 0; }
+.emojibar button:hover { border-color: var(--cyan); }
+@media (max-width: 520px) { .emojibar { flex-direction: row; } .feed { bottom: 52px; } }
+.bubble { position: absolute; bottom: 30px; font-size: 26px; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35), rgba(6, 182, 212, 0.12) 60%, rgba(6, 182, 212, 0.05)); border: 1px solid rgba(165, 243, 252, 0.4); animation: rise 3.4s ease-in forwards; }
+@keyframes rise { to { transform: translate(var(--dx, 0px), -420px) scale(1.15); opacity: 0; } }
+
+/* history strip */
+.history { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.history .h { flex: none; font-family: var(--f-mono); font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid currentColor; background: rgba(3, 7, 18, 0.6); font-variant-numeric: tabular-nums; }
+.hist-label { flex: none; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); align-self: center; }
+
+/* bet panels */
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .panels { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.panel.active { border-color: var(--line-strong); box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.15); }
+.panel-head { display: flex; align-items: center; gap: 8px; }
+.tag { font-family: var(--f-display); font-weight: 800; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 4px; background: var(--cyan); color: var(--abyss); font-size: 13px; }
+.panel[data-id="B"] .tag { background: #a78bfa; }
+.panel-head h3 { margin: 0; font-family: var(--f-display); font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.panel-head small { margin-left: auto; color: var(--muted); font-size: 11px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row > label { font-size: 12px; color: var(--muted); min-width: 64px; }
+.stepper { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex: 1; min-width: 140px; }
+.stepper button { background: var(--panel-2); border: 0; width: 36px; font-size: 16px; }
+.stepper input { flex: 1; min-width: 0; text-align: center; background: transparent; border: 0; padding: 7px 4px; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.auto { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.auto input[type="checkbox"] { accent-color: var(--cyan); width: 16px; height: 16px; }
+.auto .x { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; }
+.auto .x input { width: 72px; background: transparent; border: 0; padding: 6px 2px; text-align: right; font-family: var(--f-mono); }
+.action { border: 0; border-radius: 8px; padding: 14px 12px; font-family: var(--f-display); font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; background: var(--cyan); color: var(--abyss); transition: filter 0.15s; min-height: 54px; }
+.action:hover { filter: brightness(1.12); }
+.action.cancel { background: #334155; color: var(--ink); }
+.action.cashout { background: var(--win); color: #022c22; box-shadow: 0 0 22px rgba(52, 211, 153, 0.35); }
+.action.queued { background: #4c1d95; color: #ede9fe; }
+.action.next { background: transparent; color: var(--ink); border: 1px dashed var(--line-strong); }
+.action:disabled { background: #1e293b; color: var(--muted); cursor: default; filter: none; box-shadow: none; }
+.panel-status { font-size: 12px; color: var(--muted); min-height: 18px; }
+.panel-status.win { color: var(--win); }
+.panel-status.loss { color: var(--alarm); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chips span { font-size: 11px; color: var(--muted); margin-right: 4px; }
+.chip { font-family: var(--f-mono); border: 1px solid var(--line-strong); background: var(--panel); border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+.chip:hover { border-color: var(--cyan); background: var(--panel-2); }
+
+/* side column */
+.side { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; display: flex; flex-direction: column; }
+.tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.tabs button { flex: none; background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 11px 12px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--cyan); }
+.tabs .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); margin-left: 4px; vertical-align: middle; }
+.pane { padding: 14px; display: flex; flex-direction: column; gap: 12px; min-height: 420px; max-height: 640px; overflow-y: auto; }
+.pane h4 { margin: 0; font-family: var(--f-display); letter-spacing: 0.1em; text-transform: uppercase; font-size: 13px; }
+.note { color: var(--muted); font-size: 12px; margin: 0; }
+
+.zones { display: grid; gap: 8px; }
+.zone { text-align: left; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid var(--zc); border-radius: 8px; background: var(--panel-2); }
+.zone:hover:not(:disabled) { border-color: var(--zc); }
+.zone:disabled { cursor: default; opacity: 0.75; }
+.zone .zn { font-family: var(--f-display); font-weight: 700; letter-spacing: 0.06em; color: var(--zc); }
+.zone .zp { font-family: var(--f-mono); font-size: 15px; text-align: right; }
+.zone .zr { font-size: 11px; color: var(--muted); font-family: var(--f-mono); }
+.zone .zs { font-size: 11px; text-align: right; font-family: var(--f-mono); }
+.zone.hit { box-shadow: 0 0 0 2px var(--zc); }
+.zone.surge .zp { color: #f0abfc; }
+
+.crew-sum { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.crew { width: 100%; border-collapse: collapse; font-size: 12px; }
+.crew td, .crew th { padding: 5px 4px; border-bottom: 1px solid rgba(6, 182, 212, 0.08); text-align: left; }
+.crew th { font-weight: 500; color: var(--muted); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+.crew td.r, .crew th.r { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.crew tr.you td { color: var(--cyan); }
+.crew .w { color: var(--win); }
+.crew .l { color: var(--alarm); opacity: 0.8; }
+
+.chatlog { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; min-height: 300px; }
+.msg { font-size: 13px; overflow-wrap: anywhere; }
+.msg b { color: var(--cyan); font-weight: 600; }
+.msg.me b { color: #c4b5fd; }
+.msg.sys { color: var(--muted); font-size: 12px; }
+.rain { border: 1px solid #f0abfc; background: rgba(46, 16, 101, 0.6); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.rain button { align-self: flex-start; background: #c026d3; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; font-weight: 600; }
+.rain button:disabled { background: #3b0764; color: #d8b4fe; cursor: default; }
+.chatform { display: flex; gap: 6px; }
+.chatform input { flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.chatform button { background: var(--cyan); color: var(--abyss); border: 0; border-radius: 6px; padding: 0 14px; font-weight: 600; }
+
+.mission { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--panel-2); }
+.mission .top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.mission .bar { height: 5px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden; }
+.mission .bar i { display: block; height: 100%; background: var(--cyan); }
+.mission.done .bar i { background: var(--win); }
+.mission small { color: var(--muted); font-size: 11px; }
+.skins { display: flex; gap: 8px; flex-wrap: wrap; }
+.skin { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px; padding: 5px 10px 5px 6px; font-size: 12px; }
+.skin i { width: 14px; height: 14px; border-radius: 50%; background: var(--sc); }
+.skin[aria-pressed="true"] { border-color: var(--cyan); }
+.skin:disabled { opacity: 0.4; cursor: not-allowed; }
+.wheel-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; position: relative; }
+#wheel { width: 240px; height: 240px; max-width: 100%; }
+.pointer { position: absolute; top: -4px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 18px solid var(--amber); }
+.spin { background: var(--amber); color: #1c1003; border: 0; border-radius: 8px; padding: 10px 18px; font-family: var(--f-display); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.spin:disabled { background: #1e293b; color: var(--muted); cursor: default; }
+.linkish { background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: 11px; padding: 0; }
+
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; font-size: 12px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--f-mono); overflow-wrap: anywhere; }
+.seedrow { display: flex; gap: 6px; }
+.seedrow input { flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-family: var(--f-mono); font-size: 12px; }
+.mathtbl-wrap { overflow-x: auto; }
+.mathtbl { border-collapse: collapse; font-size: 12px; width: 100%; }
+.mathtbl th, .mathtbl td { padding: 5px 6px; border-bottom: 1px solid rgba(6, 182, 212, 0.1); text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mathtbl th:first-child, .mathtbl td:first-child { text-align: left; font-family: var(--f-body); }
+.mathtbl th { color: var(--muted); font-weight: 500; font-family: var(--f-body); }
+pre.json { margin: 0; background: #020617; border: 1px solid var(--line); border-radius: 6px; padding: 10px; font-size: 11px; overflow-x: auto; color: #a5f3fc; }
+.ok { color: var(--win); }
+.bad { color: var(--alarm); }
+.rounds { display: flex; flex-direction: column; gap: 4px; }
+.rounds button { display: flex; justify-content: space-between; gap: 8px; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-family: var(--f-mono); font-size: 12px; }
+.rounds button:hover { border-color: var(--cyan); }
+.wlog { display: flex; flex-direction: column; gap: 8px; }
+.wlog .ep { font-family: var(--f-mono); font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.wlog .ep b { color: var(--amber); font-weight: 500; }
+.wlog .ep b.c { color: var(--win); }
+
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 6px; z-index: 20; width: min(420px, calc(100% - 32px)); pointer-events: none; }
+.toast { background: #0b1324; border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 14px; font-size: 13px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); animation: slidein 0.3s ease-out; }
+footer { margin-top: 18px; color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .live::before, .badge, .toast { animation: none; }
+  .bubble { animation-duration: 1.6s; }
+}
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>Deep Sea <span>Descent</span></h1>
+      <small>LIVE CRASH · PLAY MONEY</small>
+    </div>
+    <div class="meter"><label>Balance</label><strong id="balance">€0.00</strong></div>
+    <div class="meter jackpot"><label>Jackpot drop · 500x</label><strong id="jackpot">€0.00</strong></div>
+    <button class="ghost" id="soundBtn" aria-pressed="false">Sound off</button>
+    <button class="ghost" id="resetBtn">Reset wallet</button>
+  </header>
+
+  <main class="layout">
+    <section class="stage-col" aria-label="Game">
+      <div class="stage" id="stage">
+        <canvas id="scene" aria-label="Hydro-cylinder studio feed"></canvas>
+        <div class="hud">
+          <div class="hud-tl"><span class="live">LIVE</span><span id="roundLabel">rnd_—</span></div>
+          <div class="hud-tr">
+            <span class="zone-pill" id="zonePill" style="color: var(--z-sun)">Sunlight Zone</span>
+            <span class="readout" id="depthOut">0 m · 1.0 atm</span>
+          </div>
+          <div class="surge" id="surgeBanner" hidden>PRESSURE SURGE</div>
+          <div class="center">
+            <div id="mult" class="idle">1.00x</div>
+            <div id="phaseText">Connecting</div>
+            <div class="progress" id="progress"><i id="progressBar"></i></div>
+          </div>
+          <div class="feed" id="feed" aria-live="polite"></div>
+          <div class="bubbles" id="bubbles"></div>
+          <div class="emojibar" id="emojibar" aria-label="Send a reaction"></div>
+        </div>
+      </div>
+
+      <div class="history" id="history"><span class="hist-label">Last dives</span></div>
+
+      <div class="panels" id="panels"></div>
+
+      <div class="chips" id="chips"><span>Quick stake → <b id="chipTarget">Panel A</b></span></div>
+    </section>
+
+    <aside class="side" aria-label="Instruments">
+      <div class="tabs" role="tablist" id="tabs"></div>
+
+      <div class="pane" id="pane-sonar" role="tabpanel">
+        <h4>Sonar Radar side bets</h4>
+        <p class="note">Call the depth zone the bathyscaphe reaches before implosion. Pays whether or not you cash out. During a Pressure Surge every side-bet payout is doubled.</p>
+        <div class="row">
+          <label for="sideStake">Stake per tap</label>
+          <div class="stepper" style="max-width: 180px"><button type="button" data-side-step="-1" aria-label="Lower side stake">−</button><input id="sideStake" inputmode="decimal" value="2.00"><button type="button" data-side-step="1" aria-label="Raise side stake">+</button></div>
+        </div>
+        <div class="zones" id="zones"></div>
+        <div class="row" style="justify-content: space-between">
+          <span class="note" id="sideNote">Bets open during the 8-second betting window.</span>
+          <button class="ghost" id="clearSide">Clear side bets</button>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-crew" role="tabpanel" hidden>
+        <h4>Crew this dive</h4>
+        <div class="crew-sum"><span id="crewCount">0 divers</span><span id="crewStake">€0 at stake</span></div>
+        <table class="crew"><thead><tr><th>Diver</th><th class="r">Stake</th><th class="r">Cash-out</th><th class="r">Win</th></tr></thead><tbody id="crewBody"></tbody></table>
+      </div>
+
+      <div class="pane" id="pane-chat" role="tabpanel" hidden>
+        <div class="chatlog" id="chatlog" aria-live="polite"></div>
+        <form class="chatform" id="chatform">
+          <input id="chatInput" maxlength="120" placeholder="Message the bridge" autocomplete="off">
+          <button type="submit">Send</button>
+        </form>
+      </div>
+
+      <div class="pane" id="pane-missions" role="tabpanel" hidden>
+        <h4>Daily submarine missions</h4>
+        <div id="missions" style="display: flex; flex-direction: column; gap: 8px"></div>
+        <h4>Hull skins</h4>
+        <div class="skins" id="skins"></div>
+        <label class="auto"><input type="checkbox" id="trailToggle" disabled> Bioluminescent trail</label>
+        <h4>Oxygen Tank daily wheel</h4>
+        <div class="wheel-wrap">
+          <div class="pointer" aria-hidden="true"></div>
+          <canvas id="wheel" width="480" height="480" aria-label="Daily bonus wheel"></canvas>
+          <button class="spin" id="spinBtn">Spin the tank</button>
+          <span class="note" id="wheelNote"></span>
+          <button class="linkish" id="resetDaily">Reset daily progress (demo)</button>
+        </div>
+      </div>
+
+      <div class="pane" id="pane-fair" role="tabpanel" hidden>
+        <h4>Provably fair</h4>
+        <p class="note">Each dive's crash point is HMAC_SHA256(server seed, client seed + ":" + nonce). The server seed's SHA-256 hash is shown before the dive and the seed is revealed after it, so you can recompute any result.</p>
+        <dl class="kv">
+          <dt>Next/current hash</dt><dd id="fHash">—</dd>
+          <dt>Nonce</dt><dd id="fNonce">—</dd>
+        </dl>
+        <div class="seedrow">
+          <input id="clientSeed" aria-label="Client seed">
+          <button class="ghost" id="seedBtn">Use seed</button>
+        </div>
+        <h4>Revealed dives</h4>
+        <div class="rounds" id="fairRounds"><span class="note">Finished dives appear here.</span></div>
+        <div id="verifyOut"></div>
+        <h4>Maths</h4>
+        <p class="note">P(reach x) = 0.965 / x. 3.50% of dives implode at 1.00x. Main game RTP 96.50%. Side-bet payouts are set so RTP stays at or under 95.50% with the 1-in-5 Surge doubling.</p>
+        <div class="mathtbl-wrap"><table class="mathtbl" id="mathTbl"></table></div>
+      </div>
+
+      <div class="pane" id="pane-wallet" role="tabpanel" hidden>
+        <h4>Seamless wallet log</h4>
+        <p class="note">Mock operator calls shaped like the spec's /wallet/debit and /wallet/credit. Newest first.</p>
+        <div class="wlog" id="wlog"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <span>Play-money prototype. No real money is wagered or paid out.</span>
+    <span>Studio feed is a rendered simulation of the hydro-cylinder set.</span>
+  </footer>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- constants ---------- */
+const HOUSE_EDGE = 0.035;
+const MAX_MULT = 10000;
+const MAX_PAYOUT = 250000;
+const TABLE_MAX = 1000;
+const BET_MS = 8000, LAUNCH_MS = 2000, CRASH_MS = 3000;
+const K_BASE = 0.16;                 // multiplier = e^(k·t), t in seconds
+const MAX_DEPTH = 10935;             // Challenger Deep, metres
+const JACKPOT_SEED = 5000;
+const SURGE_P = 0.2;
+
+// base payouts solved from 1.2·p·b <= 0.955 (Surge doubles payouts in 20% of dives)
+const ZONES = [
+  { id: "sun", name: "Sunlight Zone", range: "1.00x–1.99x", depth: "0–200 m", lo: 1, hi: 2, pay: 1.53, color: "var(--z-sun)", hex: "#fcd34d" },
+  { id: "twi", name: "Twilight Zone", range: "2.00x–9.99x", depth: "201–1,000 m", lo: 2, hi: 10, pay: 2.06, color: "var(--z-twi)", hex: "#38bdf8" },
+  { id: "mid", name: "Midnight Zone", range: "10.00x–99.99x", depth: "1,001–4,000 m", lo: 10, hi: 100, pay: 9.16, color: "var(--z-mid)", hex: "#818cf8" },
+  { id: "aby", name: "Abyssal Trench", range: "100.00x+", depth: "4,001 m+", lo: 100, hi: Infinity, pay: 82.4, color: "var(--z-aby)", hex: "#d946ef" },
+];
+const reach = (x) => x <= 1 ? 1 : (1 - HOUSE_EDGE) / x;
+ZONES.forEach((z) => { z.p = reach(z.lo) - (z.hi === Infinity ? 0 : reach(z.hi)); z.rtp = z.p * z.pay * (1 - SURGE_P + SURGE_P * 2); });
+
+const SKINS = [
+  { id: "std", name: "Research Yellow", color: "#facc15" },
+  { id: "violet", name: "Abyssal Violet", color: "#a78bfa" },
+  { id: "gold", name: "Captain's Gold", color: "#f59e0b" },
+];
+const MISSIONS = [
+  { id: "m5x", text: "Cash out at 5.00x or higher three times", goal: 3, reward: "Abyssal Violet hull", unlock: "violet" },
+  { id: "side", text: "Win a Sonar Radar side bet", goal: 1, reward: "Bioluminescent trail", unlock: "trail" },
+  { id: "dives", text: "Ride 15 dives with a bet on board", goal: 15, reward: "Captain's Gold hull", unlock: "gold" },
+];
+const WHEEL = [5, 10, 2, 25, 5, 50, 10, 100];
+const EMOJI = ["🫧", "🐙", "🦑", "🐋", "🐡", "🔥", "😱"];
+const NAMES = ["Player99", "NautilusNed", "Kraken_Kate", "deepdiver_88", "Marlin", "AbyssWalker", "Sonar_Sam", "BubbleBaron", "Hadal_Hana", "TrenchRat", "Coral_Q", "Anglerfish", "Leviathan_Lou", "MarianaM", "BenthicBen", "SiphonSue", "Nemo_2", "PelagicPete", "VentHunter", "Jelly_J", "Bathy_B", "SnailfishSi", "OarfishO", "Lanternfish", "Gulper_G", "TideTurner", "Pressure_P", "Isopod_Ivy", "Abyss_Al", "Hydro_H", "Siphono", "Dumbo_Oct", "BlueHole", "Mid_Water", "Ballast_B", "Sub_Zero", "Fathom5", "Krill_K", "Riftia", "Chimaera"];
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const eur = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+const money = (v) => eur.format(v);
+const cents = (v) => Math.round(v * 100) / 100;
+const floor2 = (v) => Math.floor(v * 100 + 1e-9) / 100;
+const fx = (m) => m.toFixed(2) + "x";
+const rand = Math.random;
+const pick = (a) => a[Math.floor(rand() * a.length)];
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const enc = new TextEncoder();
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const randHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+};
+const today = () => new Date().toISOString().slice(0, 10);
+const zoneOf = (m) => ZONES.find((z) => m >= z.lo && m < z.hi) || ZONES[0];
+function depthOf(m) {
+  if (m < 2) return 200 * Math.log2(m);
+  if (m < 10) return 200 + 800 * Math.log(m / 2) / Math.log(5);
+  if (m < 100) return 1000 + 3000 * Math.log10(m / 10);
+  return Math.min(MAX_DEPTH, 4000 + (MAX_DEPTH - 4000) * Math.log10(m / 100) / 2);
+}
+
+/* ---------- provably fair ---------- */
+// pure-JS SHA-256 fallback for contexts without crypto.subtle (e.g. plain-http hosting)
+const SHA_K = Uint32Array.from([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function sha256js(bytes) {
+  const l = bytes.length, n = ((l + 9 + 63) >> 6) << 6, m = new Uint8Array(n);
+  m.set(bytes); m[l] = 0x80;
+  const dv = new DataView(m.buffer); dv.setUint32(n - 4, l * 8); dv.setUint32(n - 8, Math.floor(l / 0x20000000));
+  const h = Uint32Array.from([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]), w = new Uint32Array(64);
+  const ror = (x, r) => (x >>> r) | (x << (32 - r));
+  for (let o = 0; o < n; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+    for (let i = 16; i < 64; i++) w[i] = (w[i - 16] + (ror(w[i - 15], 7) ^ ror(w[i - 15], 18) ^ (w[i - 15] >>> 3)) + w[i - 7] + (ror(w[i - 2], 17) ^ ror(w[i - 2], 19) ^ (w[i - 2] >>> 10))) >>> 0;
+    let [a, b, c, d, e, f, g, k] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (k + (ror(e, 6) ^ ror(e, 11) ^ ror(e, 25)) + ((e & f) ^ (~e & g)) + SHA_K[i] + w[i]) >>> 0;
+      const t2 = ((ror(a, 2) ^ ror(a, 13) ^ ror(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      k = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    [a, b, c, d, e, f, g, k].forEach((v, i) => { h[i] = (h[i] + v) >>> 0; });
+  }
+  const out = new Uint8Array(32); const ov = new DataView(out.buffer); h.forEach((v, i) => ov.setUint32(i * 4, v));
+  return out;
+}
+function hmacjs(key, msg) {
+  let k = key.length > 64 ? sha256js(key) : key;
+  const kp = new Uint8Array(64); kp.set(k);
+  const ipad = kp.map((b) => b ^ 0x36), opad = kp.map((b) => b ^ 0x5c);
+  const inner = sha256js(Uint8Array.from([...ipad, ...msg]));
+  return sha256js(Uint8Array.from([...opad, ...inner]));
+}
+const subtle = globalThis.crypto && crypto.subtle;
+async function sha256(s) { return subtle ? hex(await subtle.digest("SHA-256", enc.encode(s))) : hex(sha256js(enc.encode(s))); }
+async function hmac(key, msg) {
+  if (!subtle) return hex(hmacjs(enc.encode(key), enc.encode(msg)));
+  const k = await subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await subtle.sign("HMAC", k, enc.encode(msg)));
+}
+async function outcome(serverSeed, clientSeed, nonce) {
+  const h = await hmac(serverSeed, clientSeed + ":" + nonce);
+  const r = parseInt(h.slice(0, 13), 16) / 2 ** 52;                 // uniform [0,1)
+  const crash = Math.min(MAX_MULT, Math.max(1, Math.floor(100 * (1 - HOUSE_EDGE) / (1 - r)) / 100));
+  const surge = parseInt(h.slice(16, 24), 16) / 2 ** 32 < SURGE_P;
+  const cause = parseInt(h.slice(24, 26), 16) % 3 === 0 ? "leviathan" : "hull";
+  return { hash: h, crash, surge, cause };
+}
+
+/* ---------- state ---------- */
+const daily = (() => {
+  const d = store.get("dsd.daily", null);
+  return d && d.date === today() ? d : { date: today(), progress: { m5x: 0, side: 0, dives: 0 }, spun: false };
+})();
+const unlocks = store.get("dsd.unlocks", { violet: false, gold: false, trail: false });
+const prefs = store.get("dsd.prefs", { skin: "std", trail: false, clientSeed: randHex(10) });
+
+const S = {
+  phase: "boot", phaseStart: 0, ready: false,
+  roundNo: 1049280, roundId: "", nonce: 1049280,
+  serverSeed: "", serverSeedHash: "", clientSeed: prefs.clientSeed, pendingClientSeed: null,
+  crash: 1, surge: false, cause: "hull", k: K_BASE, mult: 1, jackpotHit: false,
+  balance: 1000, jackpot: 18450 + Math.floor(rand() * 4000),
+  panels: {
+    A: { id: "A", title: "Safety Bet", hint: "Low auto cash-out", stake: 10, auto: true, autoVal: 1.4, state: "idle", queued: false, bet: 0, status: "", statusCls: "" },
+    B: { id: "B", title: "Deep Dive Bet", hint: "Chase the trench", stake: 5, auto: false, autoVal: 100, state: "idle", queued: false, bet: 0, status: "", statusCls: "" },
+  },
+  activePanel: "A",
+  side: { sun: 0, twi: 0, mid: 0, aby: 0 }, sideResult: null,
+  bots: [], history: [], fair: [], wlog: [], tx: 9981247129841,
+  lastActive: -Infinity, rainIn: 4, crewDirty: true,
+};
+
+/* ---------- wallet (mock seamless API) ---------- */
+function wallet(kind, amount, extra = {}) {
+  amount = cents(amount);
+  const payload = { transaction_id: "tx_" + (S.tx++), player_id: "usr_8832190", game_id: "deep-sea-descent", round_id: S.roundId, currency: "EUR", amount, ...extra, timestamp: Date.now() };
+  S.balance = cents(S.balance + (kind === "debit" ? -amount : amount));
+  S.wlog.unshift({ ep: "POST /wallet/" + kind, kind, payload });
+  if (S.wlog.length > 40) S.wlog.pop();
+  store.set("dsd.balance", S.balance);
+  renderBalance();
+  if (activeTab === "wallet") renderWallet();
+}
+
+/* ---------- round lifecycle ---------- */
+async function prepareRound() {
+  S.ready = false;
+  S.roundNo++; S.nonce++;
+  S.roundId = "rnd_" + S.roundNo;
+  if (S.pendingClientSeed) { S.clientSeed = S.pendingClientSeed; S.pendingClientSeed = null; }
+  S.serverSeed = randHex(32);
+  S.serverSeedHash = await sha256(S.serverSeed);
+  const o = await outcome(S.serverSeed, S.clientSeed, S.nonce);
+  Object.assign(S, { crash: o.crash, surge: o.surge, cause: o.cause });
+  S.k = K_BASE * (S.surge ? 2 : 1);
+  S.ready = true;
+  renderFairHead();
+}
+
+function startBetting(now) {
+  S.phase = "betting"; S.phaseStart = now; S.mult = 1; S.jackpotHit = false; S.sideResult = null;
+  S.side = { sun: 0, twi: 0, mid: 0, aby: 0 };
+  prepareRound();
+  $("roundLabel").textContent = S.roundId;
+  for (const p of Object.values(S.panels)) {
+    p.state = "idle"; p.bet = 0;
+    if (p.queued) { p.queued = false; place(p.id, true); }
+  }
+  spawnBots();
+  if (--S.rainIn <= 0) { S.rainIn = 5 + Math.floor(rand() * 4); sonarRain(); }
+  renderZones(); S.crewDirty = true;
+}
+
+function startLaunch(now) {
+  S.phase = "launch"; S.phaseStart = now;
+  $("roundLabel").textContent = S.roundId;
+  const volume = S.bots.reduce((a, b) => a + b.stake, 0) + Object.values(S.panels).reduce((a, p) => a + (p.state === "placed" ? p.bet : 0), 0);
+  S.jackpot = cents(S.jackpot + volume * 0.004);
+  if (S.surge) { $("surgeBanner").hidden = false; sysChat("Pressure Surge detected. Climb rate doubled, side-bet payouts doubled."); }
+  renderZones(); renderBalance();
+  audio.throttle();
+}
+
+function startDescent(now) { S.phase = "descent"; S.phaseStart = now; }
+
+function processAutos(m) {
+  for (const p of Object.values(S.panels)) {
+    if (p.state === "placed" && p.auto && p.autoVal <= m && p.autoVal <= S.crash) cashout(p.id, p.autoVal, "auto");
+  }
+  for (const b of S.bots) {
+    if (!b.out && b.target <= m && b.target <= S.crash) {
+      b.out = b.target; b.win = cents(Math.min(b.stake * b.target, MAX_PAYOUT)); S.crewDirty = true;
+      if (b.win >= 150 || (b.target >= 25 && b.win >= 20)) feed(`${b.name} cashed out <b>${money(b.win)}</b> at ${fx(b.target)}`);
+      if (rand() < 0.05) botChat(b.name, `out at ${fx(b.target)} 🙌`);
+    }
+  }
+}
+
+function payJackpot() {
+  S.jackpotHit = true;
+  const riders = [];
+  for (const p of Object.values(S.panels)) if (p.state === "placed") riders.push({ you: true, name: "You (" + p.id + ")", stake: p.bet });
+  for (const b of S.bots) if (!b.out) riders.push({ name: b.name, stake: b.stake });
+  if (!riders.length) return;
+  const total = riders.reduce((a, r) => a + r.stake, 0), pool = S.jackpot;
+  let mine = 0;
+  for (const r of riders) if (r.you) mine += pool * r.stake / total;
+  if (mine > 0) { wallet("credit", mine, { type: "jackpot_drop" }); toast(`Jackpot drop! Your share: ${money(mine)}`); }
+  feed(`JACKPOT DROP <b>${money(pool)}</b> shared by ${riders.length} divers past 500x`, true);
+  S.jackpot = JACKPOT_SEED;
+}
+
+function crash(now) {
+  S.phase = "crashed"; S.phaseStart = now; S.mult = S.crash;
+  $("surgeBanner").hidden = true;
+  let rode = false;
+  for (const p of Object.values(S.panels)) {
+    if (p.state === "placed") { p.state = "lost"; p.status = `Imploded at ${fx(S.crash)}. Lost ${money(p.bet)}.`; p.statusCls = "loss"; rode = true; }
+    else if (p.state === "cashed") rode = true;
+  }
+  if (rode) bumpMission("dives");
+  // side bets
+  const z = zoneOf(S.crash), stake = S.side[z.id];
+  const total = Object.values(S.side).reduce((a, b) => a + b, 0);
+  if (total > 0) {
+    if (stake > 0) {
+      const win = stake * z.pay * (S.surge ? 2 : 1);
+      wallet("credit", win, { side_bet: z.id, multiplier: z.pay * (S.surge ? 2 : 1) });
+      toast(`Sonar hit: ${z.name} pays ${money(win)}`);
+      bumpMission("side");
+    } else toast(`Sonar miss: dive ended in the ${z.name}`);
+  }
+  S.sideResult = z.id;
+  for (const b of S.bots) if (!b.out) b.lost = true;
+  S.history.unshift(S.crash); if (S.history.length > 24) S.history.pop();
+  S.fair.unshift({ round_id: S.roundId, server_seed: S.serverSeed, server_seed_hash: S.serverSeedHash, client_seed: S.clientSeed, nonce: S.nonce, result_multiplier: S.crash, surge: S.surge });
+  if (S.fair.length > 30) S.fair.pop();
+  renderHistory(); renderFairRounds(); renderZones(); S.crewDirty = true;
+  if (rand() < 0.7) setTimeout(() => botChat(pick(NAMES), pick(S.crash < 1.2 ? ["instant implosion 😩", "1.00x… the trench said no", "brutal"] : S.cause === "leviathan" ? ["leviathan got us 🦑", "saw the eye right before 👀", `${fx(S.crash)}, nice dive`] : [`${fx(S.crash)}, hull gave out`, "again!", "cashed just in time"])), 600);
+  audio.implode();
+}
+
+/* ---------- player actions ---------- */
+function readStake(id) {
+  const v = parseFloat($("stake" + id).value);
+  return isFinite(v) ? cents(v) : 0;
+}
+function place(id, fromQueue = false) {
+  const p = S.panels[id], stake = readStake(id);
+  if (stake < 0.1) return setStatus(p, "Minimum stake is €0.10.", "loss");
+  if (stake > TABLE_MAX) return setStatus(p, `Table maximum is ${money(TABLE_MAX)}.`, "loss");
+  if (stake > S.balance) return setStatus(p, fromQueue ? "Queued bet skipped: not enough balance." : "Not enough balance for that stake.", "loss");
+  p.bet = stake; p.state = "placed";
+  wallet("debit", stake, { panel: "PANEL_" + id });
+  setStatus(p, `${money(stake)} on board${p.auto ? `, auto cash-out at ${fx(p.autoVal)}` : ", manual cash-out"}.`, "");
+  S.crewDirty = true;
+}
+function cancel(id) {
+  const p = S.panels[id];
+  wallet("rollback", p.bet, { panel: "PANEL_" + id });
+  p.state = "idle"; p.bet = 0; setStatus(p, "Bet cancelled and refunded.", ""); S.crewDirty = true;
+}
+function cashout(id, m, how) {
+  const p = S.panels[id];
+  if (p.state !== "placed") return;
+  m = floor2(m);
+  const payout = cents(Math.min(p.bet * m, MAX_PAYOUT));
+  p.state = "cashed";
+  wallet("credit", payout, { multiplier: m, panel: "PANEL_" + id });
+  const ack = 8 + Math.floor(rand() * 20);
+  setStatus(p, `Cashed ${money(payout)} at ${fx(m)} (${how}) · cashout_ack ${ack} ms`, "win");
+  if (payout >= 50 || m >= 10) feed(`You cashed out <b>${money(payout)}</b> at ${fx(m)}`);
+  if (m >= 5) bumpMission("m5x");
+  audio.cash();
+  S.crewDirty = true;
+}
+function onAction(id) {
+  const p = S.panels[id];
+  if (S.phase === "betting") { p.state === "placed" ? cancel(id) : place(id); }
+  else if (S.phase === "descent" && p.state === "placed") cashout(id, S.mult, "manual");
+  else if (p.state !== "placed") { p.queued = !p.queued; }
+  updatePanels(true);
+}
+function setStatus(p, text, cls) { p.status = text; p.statusCls = cls; updatePanels(true); }
+
+/* ---------- side bets ---------- */
+function sideStake() { const v = parseFloat($("sideStake").value); return isFinite(v) ? cents(v) : 0; }
+function addSide(zid) {
+  if (S.phase !== "betting") return;
+  const s = sideStake();
+  if (s < 0.1) return toast("Side-bet minimum is €0.10.");
+  if (s > S.balance) return toast("Not enough balance for that side bet.");
+  if (S.side[zid] + s > 500) return toast("Side-bet maximum is €500 per zone.");
+  S.side[zid] = cents(S.side[zid] + s);
+  wallet("debit", s, { side_bet: zid });
+  renderZones();
+}
+function clearSide() {
+  if (S.phase !== "betting") return;
+  const total = Object.values(S.side).reduce((a, b) => a + b, 0);
+  if (total > 0) wallet("rollback", total, { side_bet: "all" });
+  S.side = { sun: 0, twi: 0, mid: 0, aby: 0 }; renderZones();
+}
+
+/* ---------- bots, chat, social ---------- */
+function spawnBots() {
+  const n = 22 + Math.floor(rand() * 38), names = [...NAMES].sort(() => rand() - 0.5);
+  S.bots = [];
+  for (let i = 0; i < n; i++) {
+    const r = rand();
+    const target = r < 0.5 ? 1.2 + rand() * 1.3 : r < 0.85 ? 2.5 + rand() * 10 : r < 0.97 ? 15 + rand() * 85 : 100 + rand() * 900;
+    S.bots.push({ name: names[i % names.length] + (i >= names.length ? "_" + i : ""), stake: pick([1, 2, 5, 5, 10, 10, 20, 25, 50, 100, 200, 500]), target: floor2(target), out: 0, win: 0, lost: false });
+  }
+}
+const chatlog = () => $("chatlog");
+function pushChat(el) {
+  const log = chatlog(); log.appendChild(el);
+  while (log.children.length > 80) log.firstChild.remove();
+  log.scrollTop = log.scrollHeight;
+  if (activeTab !== "chat") markTab("chat");
+}
+function botChat(name, text) { const d = document.createElement("div"); d.className = "msg"; d.innerHTML = `<b></b> `; d.firstChild.textContent = name; d.append(text); pushChat(d); }
+function sysChat(text) { const d = document.createElement("div"); d.className = "msg sys"; d.textContent = "Bridge · " + text; pushChat(d); }
+function sonarRain() {
+  const n = 10 + Math.floor(rand() * 15), amt = pick([1, 2, 2, 5]);
+  const box = document.createElement("div"); box.className = "rain";
+  box.innerHTML = `<strong>Sonar Rain</strong><span>The Captain dropped ${n} free bets of ${money(amt)} for active chatters. 15 seconds to catch one.</span><button type="button">Catch ${money(amt)}</button><small class="note"></small>`;
+  const btn = box.querySelector("button"), note = box.querySelector("small");
+  let left = n, done = false;
+  btn.onclick = () => {
+    if (done) return;
+    if (performance.now() - S.lastActive > 180000) { note.textContent = "Send a chat message or a reaction to qualify, then tap again."; return; }
+    done = true; btn.disabled = true; btn.textContent = "Caught"; left--;
+    wallet("credit", amt, { type: "sonar_rain_voucher" });
+    note.textContent = `${money(amt)} added to your balance.`;
+  };
+  setTimeout(() => { if (!done) { btn.disabled = true; btn.textContent = "Rain over"; done = true; } }, 15000);
+  const catches = Math.min(left, 3 + Math.floor(rand() * 4));
+  for (let i = 0; i < catches; i++) setTimeout(() => sysChat(`${pick(NAMES)} caught a ${money(amt)} free bet`), 1500 + i * 1700);
+  pushChat(box);
+}
+function reaction(emoji, mine) {
+  const layer = $("bubbles"), b = document.createElement("div");
+  b.className = "bubble"; b.textContent = emoji;
+  b.style.left = (8 + rand() * 70) + "%";
+  b.style.setProperty("--dx", ((rand() - 0.5) * 120).toFixed(0) + "px");
+  b.addEventListener("animationend", () => b.remove());
+  layer.appendChild(b);
+  if (mine) S.lastActive = performance.now();
+}
+function feed(html, jp) {
+  const f = $("feed"), d = document.createElement("div");
+  d.className = "badge" + (jp ? " jp" : ""); d.innerHTML = html;
+  f.prepend(d);
+  while (f.children.length > 4) f.lastChild.remove();
+  setTimeout(() => d.remove(), 6000);
+}
+const BOT_LINES = {
+  betting: ["A on 1.4x, B riding to the trench", "feeling an abyssal one", "Twilight side bet again", "Captain, take us deep", "who's in for 100x?", "small stakes this round", "skipping this one, watching"],
+  descent: ["hold…", "HOLD", "sonar pinging fast", "still in!", "past the twilight line 👀", "out!", "come on 10x"],
+};
+let nextBotChat = 0;
+
+/* ---------- missions, skins, wheel ---------- */
+function bumpMission(id) {
+  const m = MISSIONS.find((x) => x.id === id);
+  if (daily.progress[id] >= m.goal) return;
+  daily.progress[id]++;
+  if (daily.progress[id] >= m.goal) {
+    unlocks[m.unlock] = true; store.set("dsd.unlocks", unlocks);
+    toast(`Mission complete: ${m.reward} unlocked`);
+  }
+  store.set("dsd.daily", daily);
+  renderMissions();
+  if (activeTab !== "missions") markTab("missions");
+}
+function renderMissions() {
+  $("missions").innerHTML = MISSIONS.map((m) => {
+    const v = Math.min(daily.progress[m.id], m.goal), done = v >= m.goal;
+    return `<div class="mission ${done ? "done" : ""}"><div class="top"><span>${m.text}</span><span class="num">${v}/${m.goal}</span></div><div class="bar"><i style="width:${(v / m.goal) * 100}%"></i></div><small>${done ? "Unlocked: " : "Reward: "}${m.reward}</small></div>`;
+  }).join("");
+  $("skins").innerHTML = SKINS.map((s) => {
+    const open = s.id === "std" || unlocks[s.id];
+    return `<button class="skin" data-skin="${s.id}" style="--sc:${s.color}" aria-pressed="${prefs.skin === s.id}" ${open ? "" : "disabled title=\"Complete a mission to unlock\""}><i></i>${s.name}</button>`;
+  }).join("");
+  $("trailToggle").disabled = !unlocks.trail;
+  $("trailToggle").checked = !!(unlocks.trail && prefs.trail);
+  renderWheelState();
+}
+const wheelCv = $("wheel"), wctx = wheelCv.getContext("2d");
+let wheelAngle = 0, spinning = false;
+function drawWheel() {
+  const R = 240, n = WHEEL.length, seg = (Math.PI * 2) / n;
+  wctx.clearRect(0, 0, 480, 480);
+  wctx.save(); wctx.translate(R, R); wctx.rotate(wheelAngle);
+  for (let i = 0; i < n; i++) {
+    wctx.beginPath(); wctx.moveTo(0, 0);
+    wctx.arc(0, 0, R - 8, -Math.PI / 2 + i * seg - seg / 2, -Math.PI / 2 + i * seg + seg / 2);
+    wctx.fillStyle = i % 2 ? "#0e3a4f" : "#1e1b4b"; wctx.fill();
+    wctx.strokeStyle = "rgba(6,182,212,.5)"; wctx.lineWidth = 2; wctx.stroke();
+    wctx.save(); wctx.rotate(i * seg);
+    wctx.fillStyle = WHEEL[i] >= 50 ? "#f0abfc" : "#dff4f9";
+    wctx.font = "700 34px Oxanium, sans-serif"; wctx.textAlign = "center";
+    wctx.fillText("€" + WHEEL[i], 0, -R + 70);
+    wctx.restore();
+  }
+  wctx.beginPath(); wctx.arc(0, 0, 46, 0, Math.PI * 2); wctx.fillStyle = "#030712"; wctx.fill();
+  wctx.strokeStyle = "#f59e0b"; wctx.lineWidth = 4; wctx.stroke();
+  wctx.fillStyle = "#f59e0b"; wctx.font = "700 22px Oxanium, sans-serif"; wctx.textAlign = "center"; wctx.textBaseline = "middle";
+  wctx.fillText("O₂", 0, 0);
+  wctx.restore();
+}
+function renderWheelState() {
+  $("spinBtn").disabled = daily.spun || spinning;
+  $("spinBtn").textContent = daily.spun ? "Come back tomorrow" : "Spin the tank";
+  $("wheelNote").textContent = daily.spun ? "Today's spin is used. It refills at midnight UTC." : "One free spin per day. Pays bonus play credits.";
+}
+function spinWheel() {
+  if (daily.spun || spinning) return;
+  spinning = true; renderWheelState();
+  const n = WHEEL.length, seg = (Math.PI * 2) / n, idx = crypto.getRandomValues(new Uint32Array(1))[0] % n;
+  const start = wheelAngle % (Math.PI * 2);
+  const target = Math.PI * 2 * 6 + (Math.PI * 2 - idx * seg) + (rand() - 0.5) * seg * 0.6;
+  const dur = reducedMotion ? 600 : 4200, t0 = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - t, 4);
+    wheelAngle = start + (target - start) * e; drawWheel();
+    if (t < 1) return requestAnimationFrame(step);
+    spinning = false; daily.spun = true; store.set("dsd.daily", daily);
+    wallet("credit", WHEEL[idx], { type: "oxygen_wheel_bonus" });
+    toast(`Oxygen Tank: ${money(WHEEL[idx])} bonus credits`);
+    renderWheelState();
+  };
+  requestAnimationFrame(step);
+}
+
+/* ---------- rendering: DOM ---------- */
+function renderBalance() { $("balance").textContent = money(S.balance); $("jackpot").textContent = money(S.jackpot); }
+function renderHistory() {
+  const h = $("history");
+  h.innerHTML = `<span class="hist-label">Last dives</span>` + S.history.map((m) => `<span class="h" style="color:${zoneOf(m).hex}" title="${zoneOf(m).name}">${fx(m)}</span>`).join("");
+}
+function buildPanels() {
+  $("panels").innerHTML = ["A", "B"].map((id) => {
+    const p = S.panels[id];
+    return `<div class="panel" data-id="${id}">
+      <div class="panel-head"><span class="tag">${id}</span><h3>${p.title}</h3><small>${p.hint}</small></div>
+      <div class="row"><label for="stake${id}">Stake €</label><div class="stepper"><button type="button" data-step="-1" aria-label="Halve stake">½</button><input id="stake${id}" inputmode="decimal" value="${p.stake.toFixed(2)}"><button type="button" data-step="1" aria-label="Double stake">2×</button></div></div>
+      <div class="auto"><input type="checkbox" id="auto${id}" ${p.auto ? "checked" : ""}><label for="auto${id}">Auto cash-out at</label><span class="x"><input id="autoVal${id}" inputmode="decimal" value="${p.autoVal.toFixed(2)}" aria-label="Auto cash-out multiplier">x</span></div>
+      <button class="action" id="act${id}" type="button">Place bet</button>
+      <div class="panel-status" id="status${id}"></div>
+    </div>`;
+  }).join("");
+  for (const id of ["A", "B"]) {
+    const el = document.querySelector(`.panel[data-id="${id}"]`), p = S.panels[id];
+    el.addEventListener("focusin", () => setActivePanel(id));
+    el.addEventListener("pointerdown", () => setActivePanel(id));
+    el.querySelectorAll("[data-step]").forEach((b) => b.addEventListener("click", () => {
+      const v = readStake(id) || 1, nv = b.dataset.step === "1" ? v * 2 : v / 2;
+      $("stake" + id).value = Math.min(TABLE_MAX, Math.max(0.1, cents(nv))).toFixed(2);
+    }));
+    $("auto" + id).addEventListener("change", (e) => { p.auto = e.target.checked; });
+    $("autoVal" + id).addEventListener("change", (e) => {
+      const v = Math.min(MAX_MULT, Math.max(1.01, floor2(parseFloat(e.target.value) || 2)));
+      p.autoVal = v; e.target.value = v.toFixed(2);
+    });
+    $("act" + id).addEventListener("click", () => onAction(id));
+  }
+  setActivePanel("A");
+}
+function setActivePanel(id) {
+  S.activePanel = id;
+  document.querySelectorAll(".panel").forEach((el) => el.classList.toggle("active", el.dataset.id === id));
+  $("chipTarget").textContent = "Panel " + id;
+}
+const lastBtn = {};
+function updatePanels(force) {
+  for (const id of ["A", "B"]) {
+    const p = S.panels[id], btn = $("act" + id);
+    let label, cls = "action", dis = false;
+    if (S.phase === "betting" && p.state === "placed") { label = "Cancel bet"; cls += " cancel"; }
+    else if (S.phase === "betting") label = `Place bet · ${money(readStake(id))}`;
+    else if (S.phase === "launch" && p.state === "placed") { label = `Locked in · ${money(p.bet)}`; dis = true; }
+    else if (S.phase === "descent" && p.state === "placed") { label = `Cash out ${money(Math.min(p.bet * floor2(S.mult), MAX_PAYOUT))}`; cls += " cashout"; }
+    else if (p.queued) { label = "Queued for next dive ✓"; cls += " queued"; }
+    else if (S.phase === "boot") { label = "Connecting"; dis = true; }
+    else { label = "Bet next dive"; cls += " next"; }
+    const key = label + cls + dis + p.status;
+    if (!force && lastBtn[id] === key) continue;
+    lastBtn[id] = key;
+    btn.textContent = label; btn.className = cls; btn.disabled = dis;
+    const st = $("status" + id); st.textContent = p.status; st.className = "panel-status " + p.statusCls;
+  }
+}
+function renderZones() {
+  const open = S.phase === "betting";
+  const surgeLive = S.surge && S.phase !== "betting";
+  $("zones").innerHTML = ZONES.map((z) => {
+    const pay = z.pay * (surgeLive ? 2 : 1), mine = S.side[z.id];
+    return `<button class="zone ${S.sideResult === z.id ? "hit" : ""} ${surgeLive ? "surge" : ""}" data-zone="${z.id}" style="--zc:${z.color}" ${open ? "" : "disabled"} type="button">
+      <span class="zn">${z.name}</span><span class="zp">${pay.toFixed(2)}x</span>
+      <span class="zr">${z.range} · ${z.depth}</span><span class="zs">${mine ? "Your stake " + money(mine) : surgeLive ? "Surge 2×" : "Surge pays " + (z.pay * 2).toFixed(2) + "x"}</span>
+    </button>`;
+  }).join("");
+  $("sideNote").textContent = open ? "Tap a zone to add your stake. Bets lock at launch." : S.phase === "crashed" ? `Dive ended in the ${zoneOf(S.crash).name}.` : "Side bets are locked for this dive.";
+}
+function renderCrew() {
+  if (!S.crewDirty || activeTab !== "crew") return;
+  S.crewDirty = false;
+  const rows = [];
+  for (const p of Object.values(S.panels)) if (p.bet > 0 && p.state !== "idle") {
+    const won = p.state === "cashed";
+    rows.push(`<tr class="you"><td>You · ${p.id}</td><td class="r">${money(p.bet)}</td><td class="r">${p.state === "cashed" ? "✓" : p.state === "lost" ? "—" : "riding"}</td><td class="r ${won ? "w" : p.state === "lost" ? "l" : ""}">${p.state === "lost" ? "lost" : won ? "won" : ""}</td></tr>`);
+  }
+  const sorted = [...S.bots].sort((a, b) => (b.win - a.win) || (b.stake - a.stake));
+  for (const b of sorted) rows.push(`<tr><td>${b.name}</td><td class="r">${money(b.stake)}</td><td class="r">${b.out ? fx(b.out) : b.lost ? "—" : "riding"}</td><td class="r ${b.out ? "w" : b.lost ? "l" : ""}">${b.out ? money(b.win) : b.lost ? "lost" : ""}</td></tr>`);
+  $("crewBody").innerHTML = rows.join("");
+  $("crewCount").textContent = `${S.bots.length + Object.values(S.panels).filter((p) => p.bet > 0).length} divers`;
+  $("crewStake").textContent = `${money(S.bots.reduce((a, b) => a + b.stake, 0))} at stake`;
+}
+function renderFairHead() {
+  $("fHash").textContent = S.serverSeedHash || "—";
+  $("fNonce").textContent = S.nonce;
+  $("clientSeed").value = S.pendingClientSeed || S.clientSeed;
+}
+function renderFairRounds() {
+  $("fairRounds").innerHTML = S.fair.map((r, i) => `<button type="button" data-fair="${i}"><span>${r.round_id}${r.surge ? " · surge" : ""}</span><span style="color:${zoneOf(r.result_multiplier).hex}">${fx(r.result_multiplier)} · verify</span></button>`).join("") || `<span class="note">Finished dives appear here.</span>`;
+}
+async function verify(i) {
+  const r = S.fair[i];
+  const o = await outcome(r.server_seed, r.client_seed, r.nonce);
+  const hashOk = (await sha256(r.server_seed)) === r.server_seed_hash, crashOk = o.crash === r.result_multiplier;
+  const { surge, ...payload } = r;
+  $("verifyOut").innerHTML = `<p class="note">GET /api/v1/provably-fair/verify?round_id=${r.round_id}</p><pre class="json"></pre><p class="note">Seed hash <span class="${hashOk ? "ok" : "bad"}">${hashOk ? "matches" : "does not match"}</span>. Recomputed crash ${fx(o.crash)} <span class="${crashOk ? "ok" : "bad"}">${crashOk ? "matches" : "does not match"}</span>. HMAC ${o.hash.slice(0, 16)}…</p>`;
+  $("verifyOut").querySelector("pre").textContent = JSON.stringify(payload, null, 2);
+}
+function renderWallet() {
+  $("wlog").innerHTML = S.wlog.map((w) => `<div><div class="ep"><b class="${w.kind === "debit" ? "" : "c"}">${w.ep}</b> → 200 OK</div><pre class="json">${JSON.stringify(w.payload, null, 2)}</pre></div>`).join("") || `<p class="note">No transactions yet. Place a bet to see the debit call.</p>`;
+}
+function renderMath() {
+  $("mathTbl").innerHTML = `<tr><th>Zone</th><th>Chance</th><th>Pays</th><th>Surge</th><th>RTP</th></tr>` +
+    ZONES.map((z) => `<tr><td style="color:${z.hex}">${z.name}</td><td>${(z.p * 100).toFixed(2)}%</td><td>${z.pay.toFixed(2)}x</td><td>${(z.pay * 2).toFixed(2)}x</td><td>${(z.rtp * 100).toFixed(2)}%</td></tr>`).join("");
+}
+function toast(text) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = text;
+  $("toasts").appendChild(t); setTimeout(() => t.remove(), 3600);
+}
+
+/* tabs */
+const TABS = [["sonar", "Sonar bets"], ["crew", "Crew"], ["chat", "Chat"], ["missions", "Missions"], ["fair", "Fair"], ["wallet", "Wallet"]];
+let activeTab = "sonar";
+function buildTabs() {
+  $("tabs").innerHTML = TABS.map(([id, label]) => `<button role="tab" id="tab-${id}" data-tab="${id}" aria-selected="${id === activeTab}" aria-controls="pane-${id}">${label}</button>`).join("");
+  $("tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab); });
+}
+function showTab(id) {
+  activeTab = id;
+  for (const [t] of TABS) { $("pane-" + t).hidden = t !== id; $("tab-" + t).setAttribute("aria-selected", t === id); }
+  $("tab-" + id).querySelector(".dot")?.remove();
+  if (id === "crew") { S.crewDirty = true; renderCrew(); }
+  if (id === "wallet") renderWallet();
+  if (id === "chat") chatlog().scrollTop = chatlog().scrollHeight;
+  store.set("dsd.tab", id);
+}
+function markTab(id) { const t = $("tab-" + id); if (t && !t.querySelector(".dot")) t.insertAdjacentHTML("beforeend", `<span class="dot" aria-label="new"></span>`); }
+
+/* ---------- audio (sonar ping, hum, implosion) ---------- */
+const audio = (() => {
+  let ctx = null, on = false, hum = null, nextPing = 0;
+  function ensure() {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = 48; o2.type = "sine"; o2.frequency.value = 50.5;
+    g.gain.value = 0; o.connect(g); o2.connect(g); g.connect(ctx.destination); o.start(); o2.start();
+    hum = g;
+  }
+  function tone(freq, dur, vol, type = "sine", slide) {
+    if (!on) return;
+    const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function noise(dur, vol) {
+    if (!on) return;
+    const len = ctx.sampleRate * dur, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (rand() * 2 - 1) * (1 - i / len);
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    f.type = "lowpass"; f.frequency.value = 900; g.gain.value = vol;
+    s.buffer = buf; s.connect(f); f.connect(g); g.connect(ctx.destination); s.start();
+  }
+  return {
+    toggle() {
+      ensure(); on = !on;
+      if (ctx.state === "suspended") ctx.resume();
+      hum.gain.setTargetAtTime(on ? 0.06 : 0, ctx.currentTime, 0.3);
+      return on;
+    },
+    tick(now) {
+      if (!on || S.phase !== "descent") return;
+      const interval = Math.max(220, 1500 / (1 + Math.log(S.mult) * 1.6));   // ping BPM rises with depth
+      if (now >= nextPing) { nextPing = now + interval; tone(1250, 0.5, 0.12, "sine", 1180); }
+    },
+    throttle() { tone(90, 1.6, 0.2, "sawtooth", 260); },
+    cash() { tone(880, 0.12, 0.12, "triangle", 1760); },
+    implode() { noise(1.4, 0.6); tone(70, 1.2, 0.5, "sine", 28); },
+  };
+})();
+
+/* ---------- canvas studio scene ---------- */
+const cv = $("scene"), ctx = cv.getContext("2d");
+let W = 0, H = 0, dpr = 1;
+function resize() {
+  const r = cv.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+}
+new ResizeObserver(resize).observe(cv);
+const bubbles = Array.from({ length: 70 }, () => ({ x: rand(), y: rand(), r: 0.6 + rand() * 2.4, s: 0.5 + rand() }));
+const trail = [];
+let steam = [], scroll = 0, prevDepth = 0, lastFrame = 0, shownDepth = 0;
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function fluidColor(f, shade) {
+  const stops = [[8, 145, 178], [30, 27, 95], [3, 7, 18]];
+  const t = Math.min(1, f) * 2, i = Math.min(1, Math.floor(t)), u = t - i;
+  const c = stops[i].map((v, k) => lerp(v, stops[i + 1][k], u) * shade);
+  return `rgb(${c.map((v) => Math.round(v)).join(",")})`;
+}
+function draw(now) {
+  const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0); lastFrame = now;
+  const t = now - S.phaseStart;
+  const depth = S.phase === "descent" || S.phase === "crashed" ? depthOf(S.mult) : 0;
+  shownDepth = S.phase === "betting" ? lerp(shownDepth, 0, 0.04) : depth;
+  const vel = S.phase === "descent" ? Math.max(0, (depth - prevDepth) / Math.max(dt, 0.001)) : 0;
+  prevDepth = depth;
+  const speed = S.phase === "crashed" ? 0 : S.phase === "descent" ? Math.min(900, 40 + vel * 1.6) : S.phase === "launch" ? 30 + t * 0.03 : 10;
+  scroll += speed * dt;
+  const frac = Math.sqrt(shownDepth / MAX_DEPTH);
+  const crashed = S.phase === "crashed";
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (crashed && t < 900 && !reducedMotion) ctx.translate((rand() - 0.5) * 12 * (1 - t / 900), (rand() - 0.5) * 8 * (1 - t / 900));
+
+  // studio room
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#0d0b2e"); bg.addColorStop(1, "#030712");
+  ctx.fillStyle = bg; ctx.fillRect(-20, -20, W + 40, H + 40);
+  const glow = ctx.createRadialGradient(W / 2, H * 0.45, 10, W / 2, H * 0.45, W * 0.6);
+  glow.addColorStop(0, "rgba(46,16,101,0.85)"); glow.addColorStop(1, "rgba(46,16,101,0)");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  // wall panels + console lights
+  ctx.strokeStyle = "rgba(6,182,212,0.07)"; ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += 56) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H * 0.82); ctx.stroke(); }
+  ctx.fillStyle = "#060b18"; ctx.fillRect(0, H * 0.84, W, H * 0.16);
+  ctx.fillStyle = "rgba(6,182,212,0.25)"; ctx.fillRect(0, H * 0.84, W, 1);
+  for (let i = 0; i < 26; i++) {
+    const x = (i + 0.5) * (W / 26), lit = Math.sin(now / 300 + i * 1.7) > 0.3;
+    ctx.fillStyle = crashed ? (lit ? "#f43f5e" : "#3f0d18") : lit ? (i % 5 ? "#06b6d4" : "#f59e0b") : "#0b2530";
+    ctx.fillRect(x - 2, H * 0.9, 4, 4);
+  }
+
+  // cylinder geometry
+  const cw = Math.min(W * 0.32, H * 0.5), cx = W / 2, top = H * 0.06, bot = H * 0.86, ch = bot - top, rr = cw * 0.18;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(cx - cw / 2, top, cw, ch, rr); ctx.clip();
+  const fl = ctx.createLinearGradient(0, top, 0, bot);
+  fl.addColorStop(0, fluidColor(frac, 1)); fl.addColorStop(1, fluidColor(Math.min(1, frac + 0.25), 0.7));
+  ctx.fillStyle = fl; ctx.fillRect(cx - cw / 2, top, cw, ch);
+  // surge streaks
+  if (S.surge && (S.phase === "descent" || S.phase === "launch")) {
+    ctx.strokeStyle = "rgba(240,171,252,0.35)"; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 9; i++) {
+      const x = cx - cw / 2 + ((i * 37 + 13) % cw), y = top + ((-scroll * 2.2 + i * 97) % ch + ch) % ch;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 40); ctx.stroke();
+    }
+  }
+  // LED rings rising past (vessel descending)
+  const gap = 44;
+  for (let y = bot + gap - (scroll % gap); y > top - gap; y -= gap) {
+    ctx.beginPath(); ctx.ellipse(cx, y, cw / 2 - 2, cw * 0.05, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = crashed ? "rgba(244,63,94,0.55)" : `rgba(34,211,238,${0.25 + 0.35 * (1 - frac)})`; ctx.lineWidth = 2; ctx.stroke();
+  }
+  // bubbles
+  for (const b of bubbles) {
+    b.y -= (0.04 + speed / ch * 0.9) * b.s * dt * (crashed ? 4 : 1);
+    if (b.y < 0) { b.y += 1; b.x = rand(); }
+    ctx.beginPath(); ctx.arc(cx - cw / 2 + b.x * cw, top + b.y * ch, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(207,250,254,0.45)"; ctx.fill();
+  }
+  // bathyscaphe
+  const skin = (SKINS.find((s) => s.id === prefs.skin) || SKINS[0]).color;
+  const sy = top + ch * 0.7 + Math.sin(now / 700) * 4 + (S.phase === "launch" ? Math.sin(now / 40) * 1.5 : 0);
+  const sw = cw * 0.52, sh = cw * 0.15;
+  if (unlocks.trail && prefs.trail && S.phase === "descent") trail.push({ x: cx + (rand() - 0.5) * sw * 0.6, y: sy - sh, a: 1 });
+  for (const p of trail) { p.y -= speed * dt * 0.9; p.a -= dt * 0.9; ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fillStyle = `rgba(103,232,249,${Math.max(0, p.a)})`; ctx.fill(); }
+  while (trail.length && trail[0].a <= 0) trail.shift();
+  const beam = ctx.createLinearGradient(0, sy, 0, bot);
+  beam.addColorStop(0, crashed ? "rgba(244,63,94,0.35)" : "rgba(254,249,195,0.35)"); beam.addColorStop(1, "rgba(254,249,195,0)");
+  ctx.fillStyle = beam; ctx.beginPath(); ctx.moveTo(cx - 6, sy + sh); ctx.lineTo(cx - cw * 0.45, bot); ctx.lineTo(cx + cw * 0.45, bot); ctx.lineTo(cx + 6, sy + sh); ctx.fill();
+  ctx.fillStyle = skin; ctx.beginPath(); ctx.ellipse(cx, sy, sw / 2, sh / 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(cx - sw * 0.1, sy - sh * 0.9, sw * 0.2, sh * 0.5);
+  ctx.fillStyle = "#cbd5e1"; ctx.beginPath(); ctx.arc(cx, sy + sh * 0.85, cw * 0.085, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = crashed ? "#f43f5e" : "#67e8f9"; ctx.beginPath(); ctx.arc(cx + cw * 0.03, sy + sh * 0.85, cw * 0.03, 0, Math.PI * 2); ctx.fill();
+  // implosion causes
+  if (crashed && S.cause === "leviathan") {
+    const p = Math.min(1, t / 2200), lx = lerp(cx + cw, cx - cw * 0.4, p), ly = top + ch * 0.66;
+    ctx.fillStyle = "rgba(2,6,23,0.92)"; ctx.beginPath(); ctx.ellipse(lx, ly, cw * 0.7, cw * 0.3, -0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fde047"; ctx.beginPath(); ctx.ellipse(lx - cw * 0.35, ly - cw * 0.06, cw * 0.06, cw * 0.03, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.fillRect(lx - cw * 0.355, ly - cw * 0.08, cw * 0.01, cw * 0.04);
+  }
+  ctx.restore();
+
+  // glass, caps
+  ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(cx - cw / 2, top, cw, ch, rr); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(cx - cw * 0.34, top + rr); ctx.lineTo(cx - cw * 0.34, bot - rr); ctx.stroke();
+  const capG = ctx.createLinearGradient(cx - cw / 2, 0, cx + cw / 2, 0);
+  capG.addColorStop(0, "#1f2937"); capG.addColorStop(0.5, "#6b7280"); capG.addColorStop(1, "#111827");
+  ctx.fillStyle = capG; ctx.fillRect(cx - cw / 2 - 10, top - 6, cw + 20, 12); ctx.fillRect(cx - cw / 2 - 10, bot - 6, cw + 20, 14);
+  if (crashed && S.cause === "hull") {
+    ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.4;
+    const ox = cx + cw * 0.12, oy = sy - 10;
+    for (let i = 0; i < 7; i++) {
+      ctx.beginPath(); ctx.moveTo(ox, oy); let x = ox, y = oy;
+      const a = (i / 7) * Math.PI * 2 + 0.3;
+      for (let s = 0; s < 5; s++) { x += Math.cos(a + Math.sin(i * 9 + s) * 0.6) * cw * 0.09; y += Math.sin(a + Math.cos(i * 7 + s) * 0.6) * cw * 0.09; ctx.lineTo(x, y); }
+      ctx.stroke();
+    }
+  }
+
+  // depth gauge
+  if (W > 360) {
+    const gx = W - 34, gt = top + 6, gb = bot - 6, gh = gb - gt;
+    const yOf = (d) => gt + Math.sqrt(d / MAX_DEPTH) * gh;
+    const marks = [0, 200, 1000, 4000, MAX_DEPTH];
+    ZONES.forEach((z, i) => { ctx.fillStyle = z.hex; ctx.globalAlpha = 0.55; ctx.fillRect(gx, yOf(marks[i]), 6, yOf(marks[i + 1]) - yOf(marks[i])); });
+    ctx.globalAlpha = 1;
+    ctx.font = "10px 'IBM Plex Mono', monospace"; ctx.fillStyle = "rgba(223,244,249,0.65)"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (const d of marks) ctx.fillText(d.toLocaleString("en") + "m", gx - 6, yOf(d));
+    const my = yOf(shownDepth);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(gx + 8, my); ctx.lineTo(gx + 18, my - 6); ctx.lineTo(gx + 18, my + 6); ctx.fill();
+  }
+
+  // implosion: steam + red klaxon (≤ 2.5 flashes per second)
+  if (crashed) {
+    if (t < 1200 && steam.length < 120) for (let i = 0; i < 4; i++) {
+      const left = rand() < 0.5;
+      steam.push({ x: left ? 0 : W, y: H * 0.84, vx: (left ? 1 : -1) * (60 + rand() * 120), vy: -40 - rand() * 80, r: 8 + rand() * 10, a: 0.55 });
+    }
+    ctx.fillStyle = `rgba(244,63,94,${reducedMotion ? 0.16 : Math.floor(t / 400) % 2 ? 0.07 : 0.26})`;
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
+  for (const s of steam) { s.x += s.vx * dt; s.y += s.vy * dt; s.r += 30 * dt; s.a -= 0.35 * dt; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fillStyle = `rgba(226,232,240,${Math.max(0, s.a)})`; ctx.fill(); }
+  steam = steam.filter((s) => s.a > 0);
+}
+
+/* ---------- per-frame HUD ---------- */
+let lastHud = "";
+function hud(now) {
+  const t = now - S.phaseStart, multEl = $("mult");
+  let mText, mCls, phase, prog = 0;
+  if (S.phase === "betting") { mText = "Place bets"; mCls = "idle"; phase = `Dive ${S.roundNo} launches in ${Math.max(0, (BET_MS - t) / 1000).toFixed(1)}s`; prog = Math.min(1, t / BET_MS); }
+  else if (S.phase === "launch") { mText = "1.00x"; mCls = ""; phase = S.surge ? "Throttle engaged · surge" : "Captain engaging throttle"; prog = Math.min(1, t / LAUNCH_MS); }
+  else if (S.phase === "descent") { mText = fx(floor2(S.mult)); mCls = ""; phase = zoneOf(S.mult).name; }
+  else if (S.phase === "crashed") { mText = fx(S.crash); mCls = "crashed"; phase = S.cause === "leviathan" ? "Hull implosion · leviathan encounter" : "Hull implosion · structural fatigue"; prog = Math.min(1, t / CRASH_MS); }
+  else { mText = "1.00x"; mCls = "idle"; phase = "Connecting to studio"; }
+  const d = S.phase === "betting" ? shownDepth : S.phase === "launch" ? 0 : depthOf(S.mult);
+  const z = zoneOf(S.phase === "descent" || S.phase === "crashed" ? S.mult : 1);
+  const key = mText + mCls + phase + Math.round(d) + z.id + Math.round(prog * 100);
+  if (key === lastHud) return;
+  lastHud = key;
+  multEl.textContent = mText; multEl.className = mCls;
+  $("phaseText").textContent = phase;
+  $("progressBar").style.width = (prog * 100) + "%";
+  $("progress").style.visibility = S.phase === "descent" ? "hidden" : "visible";
+  $("progressBar").style.background = S.phase === "crashed" ? "var(--alarm)" : "var(--cyan)";
+  $("depthOut").textContent = `${Math.round(d).toLocaleString("en")} m · ${(1 + d / 10.06).toFixed(1)} atm`;
+  const pill = $("zonePill"); pill.textContent = z.name; pill.style.color = z.color;
+}
+
+/* ---------- main loop ---------- */
+function frame(now) {
+  const t = now - S.phaseStart;
+  if (S.phase === "betting" && t >= BET_MS && S.ready) startLaunch(now);
+  else if (S.phase === "launch" && t >= LAUNCH_MS) startDescent(now);
+  else if (S.phase === "descent") {
+    const raw = Math.exp(S.k * t / 1000);
+    processAutos(Math.min(raw, S.crash));
+    if (!S.jackpotHit && S.crash >= 500 && raw >= 500) payJackpot();
+    if (raw >= S.crash) crash(now); else S.mult = raw;
+  } else if (S.phase === "crashed" && t >= CRASH_MS) startBetting(now);
+
+  if (now > nextBotChat && (S.phase === "betting" || S.phase === "descent")) {
+    nextBotChat = now + 2500 + rand() * 4500;
+    botChat(pick(NAMES), pick(BOT_LINES[S.phase]));
+    if (rand() < 0.5) reaction(pick(EMOJI), false);
+  }
+  hud(now); updatePanels(false); renderCrew(); audio.tick(now);
+  if (W > 0) draw(now);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- wiring ---------- */
+function wire() {
+  buildTabs(); buildPanels(); renderMath(); renderMissions(); drawWheel(); renderHistory(); renderZones(); renderBalance(); renderFairRounds();
+  const chips = $("chips");
+  for (const [label, v] of [["€1", 1], ["€5", 5], ["€25", 25], ["€100", 100], ["MAX", "max"]]) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = label;
+    b.onclick = () => { const val = v === "max" ? Math.min(TABLE_MAX, Math.floor(S.balance * 100) / 100) : v; $("stake" + S.activePanel).value = val.toFixed(2); updatePanels(true); };
+    chips.appendChild(b);
+  }
+  for (const e of EMOJI) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = e; b.setAttribute("aria-label", "React " + e);
+    b.onclick = () => reaction(e, true); $("emojibar").appendChild(b);
+  }
+  $("zones").addEventListener("click", (e) => { const z = e.target.closest("[data-zone]"); if (z) addSide(z.dataset.zone); });
+  document.querySelectorAll("[data-side-step]").forEach((b) => b.addEventListener("click", () => {
+    const v = sideStake() || 1; $("sideStake").value = Math.min(500, Math.max(0.1, cents(b.dataset.sideStep === "1" ? v * 2 : v / 2))).toFixed(2);
+  }));
+  $("clearSide").onclick = clearSide;
+  $("chatform").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = $("chatInput").value.trim(); if (!v) return;
+    const d = document.createElement("div"); d.className = "msg me"; d.innerHTML = "<b>You</b> "; d.append(v); pushChat(d);
+    $("chatInput").value = ""; S.lastActive = performance.now();
+    if (rand() < 0.6) setTimeout(() => botChat(pick(NAMES), pick(["good luck on the dive", "🫡", "same", "let's go deep", "captain says hi"])), 900 + rand() * 1500);
+  });
+  $("fairRounds").addEventListener("click", (e) => { const b = e.target.closest("[data-fair]"); if (b) verify(+b.dataset.fair); });
+  $("seedBtn").onclick = () => {
+    const v = $("clientSeed").value.trim().slice(0, 64);
+    if (!v) return toast("Enter a client seed first.");
+    S.pendingClientSeed = v; prefs.clientSeed = v; store.set("dsd.prefs", prefs);
+    toast("Client seed saved. It applies from the next dive.");
+  };
+  $("skins").addEventListener("click", (e) => { const b = e.target.closest("[data-skin]"); if (!b || b.disabled) return; prefs.skin = b.dataset.skin; store.set("dsd.prefs", prefs); renderMissions(); });
+  $("trailToggle").onchange = (e) => { prefs.trail = e.target.checked; store.set("dsd.prefs", prefs); };
+  $("spinBtn").onclick = spinWheel;
+  $("resetDaily").onclick = () => { daily.progress = { m5x: 0, side: 0, dives: 0 }; daily.spun = false; store.set("dsd.daily", daily); renderMissions(); toast("Daily missions and wheel reset."); };
+  $("soundBtn").onclick = () => { const on = audio.toggle(); $("soundBtn").textContent = on ? "Sound on" : "Sound off"; $("soundBtn").setAttribute("aria-pressed", on); };
+  $("resetBtn").onclick = () => {
+    const diff = cents(1000 - S.balance);
+    if (diff > 0) wallet("credit", diff, { type: "demo_topup" }); else if (diff < 0) wallet("debit", -diff, { type: "demo_reset" });
+    toast("Play wallet reset to €1,000.00.");
+  };
+  const tab = store.get("dsd.tab", "sonar"); if (TABS.some(([id]) => id === tab)) showTab(tab);
+}
+
+function start(data) {
+  S.balance = data.balance ?? store.get("dsd.balance", 1000);
+  if (data.history) S.history = data.history;
+  if (data.fair) S.fair = data.fair;
+  if (data.wlog) S.wlog = data.wlog;
+  if (data.jackpot) S.jackpot = data.jackpot;
+  wire();
+  sysChat("Welcome aboard. The Captain launches a dive roughly every 25 seconds.");
+  sysChat("Panel A suits a low auto cash-out; Panel B is for chasing the trench.");
+  window.claude?.hot?.snapshot?.(() => ({ balance: S.balance, history: S.history, fair: S.fair, wlog: S.wlog, jackpot: S.jackpot }));
+  startBetting(performance.now());
+  requestAnimationFrame(frame);
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
