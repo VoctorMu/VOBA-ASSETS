@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from html import escape
 import logging
 import threading
 from datetime import datetime, timezone
@@ -55,7 +54,7 @@ class Engine:
             self.guard.roll(datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%d"), equity)
             if self.guard.loss_pct(equity) >= self.guard.cap_pct and self.cap_alert_day != self.guard.day:
                 self.cap_alert_day = self.guard.day
-                self.notifier.send(f"🛑 <b>Daily loss cap hit</b> (-{self.guard.loss_pct(equity):.2f}%). "
+                self.notifier.send(f"🛑 Daily loss cap hit (-{self.guard.loss_pct(equity):.2f}%). "
                                    f"No new trades until tomorrow (UTC).")
             self._save()
             ecfg = self.cfg["engine"]
@@ -76,7 +75,7 @@ class Engine:
                 except Exception as exc:  # one bad symbol must not stop the others
                     log.exception("error on %s", sym)
                     if self.errors.get(sym) != str(exc):
-                        self.notifier.send(f"⚠️ <b>Error on {escape(sym)}</b>: {escape(str(exc))}")
+                        self.notifier.send(f"⚠️ Error on {sym}: {exc}")
                     self.errors[sym] = str(exc)
             self.last_step = now
 
@@ -92,7 +91,7 @@ class Engine:
             log.info("%s rejected: %s", sig.setup_id, why)
             self.journal.record(**row, status="rejected", detail=why)
             if self.notifier.notify_rejections:
-                self.notifier.send(f"⏭️ <b>Skipped {_side(sig.direction)} {escape(sig.symbol)}</b>\n{escape(why)}")
+                self.notifier.send(f"⏭️ Skipped {_side(sig.direction)} {sig.symbol}\n{why}")
 
         if self.paused:
             return reject("engine paused")
@@ -137,10 +136,10 @@ class Engine:
         be = rcfg.get("breakeven", {})
         be_txt = f"\nStop moves to break-even at {be['trigger_r']:g}R" if be.get("enabled") else ""
         self.notifier.send(
-            f"{'🟢' if sig.direction > 0 else '🔴'} <b>{_side(sig.direction)} {escape(sig.symbol)}</b>\n"
+            f"{'🟢' if sig.direction > 0 else '🔴'} {_side(sig.direction)} {sig.symbol}\n"
             f"Entry {row['entry']:.2f} · SL {sig.stop:.2f} · TP {target:.2f}\n"
             f"{volume:g} lots · risk {risk_money:.2f} ({rcfg['risk_per_trade_pct']:g}%) · 1:{rcfg['reward_risk']:g}\n"
-            f"<i>{escape(' · '.join(sig.reasons))}</i>{be_txt}")
+            f"{' · '.join(sig.reasons)}{be_txt}")
 
     def _manage_breakeven(self):
         """Move the stop to entry (+lock_r) once a trade has run trigger_r times its initial risk."""
@@ -161,7 +160,7 @@ class Engine:
             res = self.broker.modify_sl(p, new_sl)
             if res.ok:
                 log.info("BREAK-EVEN #%s %s stop -> %s", p.ticket, p.symbol, new_sl)
-                self.notifier.send(f"🛡️ <b>Break-even #{p.ticket} {escape(p.symbol)}</b>\n"
+                self.notifier.send(f"🛡️ Break-even #{p.ticket} {p.symbol}\n"
                                    f"Price reached {be['trigger_r']:g}R; stop moved to {new_sl:.2f}. "
                                    f"This trade can no longer lose.")
             else:
@@ -192,7 +191,7 @@ class Engine:
                 icon, what = ("💚", "Stop hit in profit") if t.profit > 0 else ("❌", "Stop loss hit")
             else:
                 icon, what = "✋", "Closed manually"
-            self.notifier.send(f"{icon} <b>{what}: {_side(t.direction)} {escape(t.symbol)}</b>\n"
+            self.notifier.send(f"{icon} {what}: {_side(t.direction)} {t.symbol}\n"
                                f"P/L {t.profit:+.2f}{r_txt} · exit {t.exit:.2f}")
 
     def close_all(self) -> int:

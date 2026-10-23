@@ -61,28 +61,60 @@ have dipped back and then gone on to 5R, in exchange for never losing on a trade
 Run `python -m deriv_swing.backtest --mt5` and the same command with `--no-breakeven` to see which suits these
 indices better.
 
-## Telegram alerts
+## WhatsApp alerts
 
-You get a message when:
+Alerts come through Meta's official **WhatsApp Cloud API**. You get a message when:
 
 | Event | Example |
 |---|---|
-| Trade opened | 🟢 BUY Volatility 75 Index: entry, SL, TP, lots, $ risk, and why it was taken |
-| Stop moved to break-even | 🛡️ Break-even #12: price reached 2R; stop moved to entry |
+| Trade opened | 🟢 BUY Volatility 75 Index · Entry … · SL … · TP … · lots, $ risk, and why |
+| Stop moved to break-even | 🛡️ Break-even #12 · price reached 2R; stop moved to entry |
 | Trade closed | 🏆 Take profit hit +5.0R · ⚪ Closed at break-even +0.0R · ❌ Stop loss hit −1.0R |
 | Daily cap hit | 🛑 No new trades until tomorrow (UTC) |
 | Engine started / symbol errors | 🚀 / ⚠️ |
 | Signal refused (optional) | ⏭️ Set `notify_rejections: true` |
 
-Setup (takes about 2 minutes):
+**The one rule to know:** WhatsApp won't let a business number message you first with free text. Every alert has
+to use a **template** that Meta approves once, like a pre-printed form where the bot only fills in the blank. The
+bot uses one template with a single blank (`{{1}}`) and puts each alert in it as one line, with parts separated by `·`.
 
-1. In Telegram, message **@BotFather**, send `/newbot` and follow the prompts. Copy the **token** it gives you.
-2. Put the token in `config.yaml` under `telegram.bot_token`, then send any message to your new bot.
-3. Run `python -m deriv_swing.notify --find-chat` and copy the `chat_id` it prints into `telegram.chat_id`.
-4. Set `telegram.enabled: true` and run `python -m deriv_swing.notify --test`. You should get a ✅ message.
+### Setup (about an hour, mostly waiting for approval)
 
-The token stays in `config.yaml`, which git ignores. Alerts are sent in the background, so if Telegram is down the
-bot keeps trading.
+1. **Create the app.** Go to <https://developers.facebook.com/apps>, choose **Create app**, then the
+   *Business* type (or the "Connect with customers through WhatsApp" use case), and add the **WhatsApp**
+   product. Meta gives you a free **test business number**.
+2. **Add yourself as a recipient.** In *WhatsApp → API Setup*, add your own WhatsApp number in the **To** list
+   and enter the code Meta sends you. The test number can message up to 5 verified numbers.
+3. **Check the connection.** Copy the **temporary access token** and the **Phone number ID** (a long number,
+   *not* the phone number itself) from API Setup into `config.yaml`:
+   ```yaml
+   whatsapp:
+     enabled: true
+     access_token: "EAAG..."
+     phone_number_id: "1234567890"
+     to: ["27820000000"]        # your number: country code, no + or spaces
+   ```
+   Run `python -m deriv_swing.notify --hello`. You should receive Meta's "Hello World" message.
+4. **Create the alert template.** In *WhatsApp Manager → Message templates → Create template*:
+   - Category **Utility**, name `trade_alert`, language **English** (code `en`)
+   - Body: `Deriv Swing alert: {{1}}. Sent by your trading bot.`
+   - Sample for `{{1}}`: `BUY Volatility 75 Index · Entry 401250.00 · SL 395100.00 · TP 432000.00`
+
+   Submit it. Approval usually takes minutes to a few hours. Meta rejects bodies that start or end with the blank,
+   which is why the template has words on both sides.
+5. **Get a permanent token.** The temporary token expires after 24 hours. In *Business Settings → Users →
+   System users*, add a system user (Admin), assign it your app and WhatsApp account, then **Generate token** with
+   the `whatsapp_business_messaging` and `whatsapp_business_management` permissions and expiry **Never**. Put
+   it in `access_token`.
+6. Run `python -m deriv_swing.notify --test`. You should get "Deriv Swing alert: ✅ test alert, WhatsApp is connected."
+
+**Cost:** Meta charges a small fee per template message, depending on your country (see Meta's WhatsApp pricing
+page). This bot sends only a few messages a day. To use your own number instead of the test number, register it
+in WhatsApp Manager and add a payment method.
+
+The token stays in `config.yaml`, which git ignores. Alerts are sent in the background, so if WhatsApp is slow or
+down the bot keeps trading; failed sends are logged with Meta's reason (for example "template not approved"
+or "recipient not in allowed list").
 
 ## Install on a Windows VPS
 
@@ -140,7 +172,7 @@ deriv_swing/
   broker.py                 PaperBroker and MT5Broker
   data.py                   MT5 candles, or a synthetic feed for testing
   journal.py                SQLite log of every signal and why it was taken or refused
-  notify.py                 Telegram alerts (+ --find-chat / --test helpers)
+  notify.py                 WhatsApp alerts (+ --hello / --test helpers)
   backtest.py               bar-by-bar replay of the live rules
   server.py, static/        FastAPI + dashboard (TradingView Lightweight Charts, bundled)
 tests/                      pytest: detectors on hand-built charts, sizing, cap, engine, API

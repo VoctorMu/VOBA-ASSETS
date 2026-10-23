@@ -70,10 +70,14 @@ engine:
   d1_bars: 400
   w1_bars: 200
 
-telegram:
+whatsapp:
   enabled: false
-  bot_token: ""               # from @BotFather
-  chat_id: ""                 # run: python -m deriv_swing.notify --find-chat
+  access_token: ""            # permanent System User token (README: WhatsApp alerts)
+  phone_number_id: ""         # WhatsApp Manager > API Setup > "Phone number ID" (not the phone number)
+  to: ["27820000000"]         # your number(s), country code first, no + or spaces
+  template: "trade_alert"     # approved template whose body has exactly one {{1}}
+  language: "en"              # the template's language code
+  api_version: "v21.0"
   notify_rejections: false    # also alert when a signal is refused (cap, min lot, ...)
 
 dashboard:

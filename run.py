@@ -51,7 +51,7 @@ def main():
     else:
         broker = PaperBroker(feed, cfg["risk"]["paper_starting_balance"], state_dir / "paper.json")
 
-    notifier = Notifier(cfg["telegram"])
+    notifier = Notifier(cfg["whatsapp"])
     engine = Engine(cfg, feed, broker, state_dir, notifier)
     notifier.send(f"🚀 Deriv Swing started · {cfg['execution'].upper()} orders · {cfg['data_source']} data · "
                   f"{len(cfg['symbols'])} symbols")

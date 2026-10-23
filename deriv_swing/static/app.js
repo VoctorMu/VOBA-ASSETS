@@ -172,7 +172,7 @@ function renderStatus(st) {
     `<span class="badge">${st.data_source === "mt5" ? "MT5 data" : "Synthetic data"}</span>`,
     `<span class="badge">${esc(st.account.name)}</span>`,
   ];
-  if (st.telegram) badges.push(`<span class="badge">Telegram ✓</span>`);
+  if (st.whatsapp) badges.push(`<span class="badge">WhatsApp ✓</span>`);
   if (st.paused) badges.push(`<span class="badge paused">PAUSED</span>`);
   $("badges").innerHTML = badges.join("");
   $("pauseBtn").textContent = st.paused ? "Resume" : "Pause";

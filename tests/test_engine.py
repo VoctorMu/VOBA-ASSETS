@@ -181,7 +181,8 @@ def test_daily_cap_alert_once(tmp_path, monkeypatch):
 def test_notifier_disabled_without_credentials():
     from deriv_swing.notify import Notifier
     sent = Collector()
-    Notifier({"enabled": True, "bot_token": "", "chat_id": "1"}, sender=sent).send("x")
+    Notifier({"enabled": True, "access_token": "", "phone_number_id": "1", "template": "t", "to": ["1"]},
+             sender=sent).send("x")
     assert sent.msgs == []
 
 
@@ -190,10 +191,31 @@ def test_notifier_background_delivery():
 
     from deriv_swing.notify import Notifier
     sent = Collector()
-    n = Notifier({"enabled": True, "bot_token": "t", "chat_id": "1"}, sender=sent)
+    n = Notifier({"enabled": True, "access_token": "t", "phone_number_id": "1", "template": "t", "to": "1"},
+                 sender=sent)
     n.send("hello")
     for _ in range(50):
         if sent.msgs:
             break
         time.sleep(0.02)
     assert sent.msgs == ["hello"]
+
+
+def test_whatsapp_template_param_is_single_line():
+    from deriv_swing.notify import to_param
+    assert to_param("🟢 BUY V75\nEntry 1 · SL 2\n\n  stop moved.   This\tline.") == \
+        "🟢 BUY V75 · Entry 1 · SL 2 · stop moved. This line"
+    assert len(to_param("x" * 5000)) == 1000
+
+
+def test_whatsapp_payload_to_every_recipient(monkeypatch):
+    import deriv_swing.notify as nt
+    posted = []
+    monkeypatch.setattr(nt, "_post", lambda cfg, payload: posted.append(payload))
+    n = nt.Notifier({"enabled": True, "access_token": "tok", "phone_number_id": "123", "template": "trade_alert",
+                     "language": "en", "to": ["+27 82 000 0000", 447700900000]}, sender=lambda t: None)
+    n._send_whatsapp("BUY V75")
+    assert [p["to"] for p in posted] == ["27820000000", "447700900000"]
+    assert posted[0]["template"] == {"name": "trade_alert", "language": {"code": "en"}, "components": [
+        {"type": "body", "parameters": [{"type": "text", "text": "BUY V75"}]}]}
+    assert posted[0]["messaging_product"] == "whatsapp" and posted[0]["type"] == "template"
