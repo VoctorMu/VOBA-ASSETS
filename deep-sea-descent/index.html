@@ -158,7 +158,7 @@ button { cursor: pointer; }
 .zone .zr { font-size: 11px; color: var(--muted); font-family: var(--f-mono); }
 .zone .zs { font-size: 11px; text-align: right; font-family: var(--f-mono); }
 .zone.hit { box-shadow: 0 0 0 2px var(--zc); }
-.zone.surge .zp { color: #f0abfc; }
+.zone.surged .zp { color: #f0abfc; }
 
 .crew-sum { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .crew { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -361,7 +361,7 @@ const HOUSE_EDGE = 0.035;
 const MAX_MULT = 10000;
 const MAX_PAYOUT = 250000;
 const TABLE_MAX = 1000;
-const BET_MS = 8000, LAUNCH_MS = 2000, CRASH_MS = 3000;
+let BET_MS = 8000, LAUNCH_MS = 2000, CRASH_MS = 3000; // server mode adopts the server's timings
 const K_BASE = 0.16;                 // multiplier = e^(k·t), t in seconds
 const MAX_DEPTH = 10935;             // Challenger Deep, metres
 const JACKPOT_SEED = 5000;
@@ -398,6 +398,7 @@ const money = (v) => eur.format(v);
 const cents = (v) => Math.round(v * 100) / 100;
 const floor2 = (v) => Math.floor(v * 100 + 1e-9) / 100;
 const fx = (m) => m.toFixed(2) + "x";
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
 const rand = Math.random;
 const pick = (a) => a[Math.floor(rand() * a.length)];
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -633,6 +634,7 @@ function cashout(id, m, how) {
 }
 function onAction(id) {
   const p = S.panels[id];
+  if (net) return netAction(id);
   if (S.phase === "betting") { p.state === "placed" ? cancel(id) : place(id); }
   else if (S.phase === "descent" && p.state === "placed") cashout(id, S.mult, "manual");
   else if (p.state !== "placed") { p.queued = !p.queued; }
@@ -648,12 +650,14 @@ function addSide(zid) {
   if (s < 0.1) return toast("Side-bet minimum is €0.10.");
   if (s > S.balance) return toast("Not enough balance for that side bet.");
   if (S.side[zid] + s > 500) return toast("Side-bet maximum is €500 per zone.");
+  if (net) return net.send({ action: "side_bet", zone: zid, amount: s });
   S.side[zid] = cents(S.side[zid] + s);
   wallet("debit", s, { side_bet: zid });
   renderZones();
 }
 function clearSide() {
   if (S.phase !== "betting") return;
+  if (net) return net.send({ action: "side_clear" });
   const total = Object.values(S.side).reduce((a, b) => a + b, 0);
   if (total > 0) wallet("rollback", total, { side_bet: "all" });
   S.side = { sun: 0, twi: 0, mid: 0, aby: 0 }; renderZones();
@@ -678,20 +682,28 @@ function pushChat(el) {
 }
 function botChat(name, text) { const d = document.createElement("div"); d.className = "msg"; d.innerHTML = `<b></b> `; d.firstChild.textContent = name; d.append(text); pushChat(d); }
 function sysChat(text) { const d = document.createElement("div"); d.className = "msg sys"; d.textContent = "Bridge · " + text; pushChat(d); }
-function sonarRain() {
-  const n = 10 + Math.floor(rand() * 15), amt = pick([1, 2, 2, 5]);
+function sonarRain(server) {
+  const n = server ? server.count : 10 + Math.floor(rand() * 15), amt = server ? server.amount : pick([1, 2, 2, 5]);
   const box = document.createElement("div"); box.className = "rain";
   box.innerHTML = `<strong>Sonar Rain</strong><span>The Captain dropped ${n} free bets of ${money(amt)} for active chatters. 15 seconds to catch one.</span><button type="button">Catch ${money(amt)}</button><small class="note"></small>`;
   const btn = box.querySelector("button"), note = box.querySelector("small");
   let left = n, done = false;
   btn.onclick = () => {
     if (done) return;
+    if (server) {
+      S.rainUi = {
+        caught(text) { done = true; btn.disabled = true; btn.textContent = "Caught"; note.textContent = text; },
+        fail(text, over) { note.textContent = text; if (over) { done = true; btn.disabled = true; btn.textContent = "Rain over"; } },
+      };
+      return net.send({ action: "rain_catch", id: server.id });
+    }
     if (performance.now() - S.lastActive > 180000) { note.textContent = "Send a chat message or a reaction to qualify, then tap again."; return; }
     done = true; btn.disabled = true; btn.textContent = "Caught"; left--;
     wallet("credit", amt, { type: "sonar_rain_voucher" });
     note.textContent = `${money(amt)} added to your balance.`;
   };
-  setTimeout(() => { if (!done) { btn.disabled = true; btn.textContent = "Rain over"; done = true; } }, 15000);
+  setTimeout(() => { if (!done) { btn.disabled = true; btn.textContent = "Rain over"; done = true; } }, server ? server.expires_in_ms : 15000);
+  if (server) return pushChat(box);
   const catches = Math.min(left, 3 + Math.floor(rand() * 4));
   for (let i = 0; i < catches; i++) setTimeout(() => sysChat(`${pick(NAMES)} caught a ${money(amt)} free bet`), 1500 + i * 1700);
   pushChat(box);
@@ -775,7 +787,12 @@ function renderWheelState() {
 function spinWheel() {
   if (daily.spun || spinning) return;
   spinning = true; renderWheelState();
-  const n = WHEEL.length, seg = (Math.PI * 2) / n, idx = crypto.getRandomValues(new Uint32Array(1))[0] % n;
+  if (net) return net.send({ action: "wheel_spin" });
+  const idx = crypto.getRandomValues(new Uint32Array(1))[0] % WHEEL.length;
+  animateWheel(idx, () => wallet("credit", WHEEL[idx], { type: "oxygen_wheel_bonus" }));
+}
+function animateWheel(idx, onDone) {
+  const n = WHEEL.length, seg = (Math.PI * 2) / n;
   const start = wheelAngle % (Math.PI * 2);
   const target = Math.PI * 2 * 6 + (Math.PI * 2 - idx * seg) + (rand() - 0.5) * seg * 0.6;
   const dur = reducedMotion ? 600 : 4200, t0 = performance.now();
@@ -784,7 +801,7 @@ function spinWheel() {
     wheelAngle = start + (target - start) * e; drawWheel();
     if (t < 1) return requestAnimationFrame(step);
     spinning = false; daily.spun = true; store.set("dsd.daily", daily);
-    wallet("credit", WHEEL[idx], { type: "oxygen_wheel_bonus" });
+    onDone();
     toast(`Oxygen Tank: ${money(WHEEL[idx])} bonus credits`);
     renderWheelState();
   };
@@ -816,10 +833,10 @@ function buildPanels() {
       const v = readStake(id) || 1, nv = b.dataset.step === "1" ? v * 2 : v / 2;
       $("stake" + id).value = Math.min(TABLE_MAX, Math.max(0.1, cents(nv))).toFixed(2);
     }));
-    $("auto" + id).addEventListener("change", (e) => { p.auto = e.target.checked; });
+    $("auto" + id).addEventListener("change", (e) => { p.auto = e.target.checked; netAuto(id); });
     $("autoVal" + id).addEventListener("change", (e) => {
       const v = Math.min(MAX_MULT, Math.max(1.01, floor2(parseFloat(e.target.value) || 2)));
-      p.autoVal = v; e.target.value = v.toFixed(2);
+      p.autoVal = v; e.target.value = v.toFixed(2); netAuto(id);
     });
     $("act" + id).addEventListener("click", () => onAction(id));
   }
@@ -835,7 +852,8 @@ function updatePanels(force) {
   for (const id of ["A", "B"]) {
     const p = S.panels[id], btn = $("act" + id);
     let label, cls = "action", dis = false;
-    if (S.phase === "betting" && p.state === "placed") { label = "Cancel bet"; cls += " cancel"; }
+    if (p.pending) { label = S.phase === "descent" ? "Cashing out…" : "Sending…"; dis = true; }
+    else if (S.phase === "betting" && p.state === "placed") { label = "Cancel bet"; cls += " cancel"; }
     else if (S.phase === "betting") label = `Place bet · ${money(readStake(id))}`;
     else if (S.phase === "launch" && p.state === "placed") { label = `Locked in · ${money(p.bet)}`; dis = true; }
     else if (S.phase === "descent" && p.state === "placed") { label = `Cash out ${money(Math.min(p.bet * floor2(S.mult), MAX_PAYOUT))}`; cls += " cashout"; }
@@ -854,7 +872,7 @@ function renderZones() {
   const surgeLive = S.surge && S.phase !== "betting";
   $("zones").innerHTML = ZONES.map((z) => {
     const pay = z.pay * (surgeLive ? 2 : 1), mine = S.side[z.id];
-    return `<button class="zone ${S.sideResult === z.id ? "hit" : ""} ${surgeLive ? "surge" : ""}" data-zone="${z.id}" style="--zc:${z.color}" ${open ? "" : "disabled"} type="button">
+    return `<button class="zone ${S.sideResult === z.id ? "hit" : ""} ${surgeLive ? "surged" : ""}" data-zone="${z.id}" style="--zc:${z.color}" ${open ? "" : "disabled"} type="button">
       <span class="zn">${z.name}</span><span class="zp">${pay.toFixed(2)}x</span>
       <span class="zr">${z.range} · ${z.depth}</span><span class="zs">${mine ? "Your stake " + money(mine) : surgeLive ? "Surge 2×" : "Surge pays " + (z.pay * 2).toFixed(2) + "x"}</span>
     </button>`;
@@ -870,7 +888,7 @@ function renderCrew() {
     rows.push(`<tr class="you"><td>You · ${p.id}</td><td class="r">${money(p.bet)}</td><td class="r">${p.state === "cashed" ? "✓" : p.state === "lost" ? "—" : "riding"}</td><td class="r ${won ? "w" : p.state === "lost" ? "l" : ""}">${p.state === "lost" ? "lost" : won ? "won" : ""}</td></tr>`);
   }
   const sorted = [...S.bots].sort((a, b) => (b.win - a.win) || (b.stake - a.stake));
-  for (const b of sorted) rows.push(`<tr><td>${b.name}</td><td class="r">${money(b.stake)}</td><td class="r">${b.out ? fx(b.out) : b.lost ? "—" : "riding"}</td><td class="r ${b.out ? "w" : b.lost ? "l" : ""}">${b.out ? money(b.win) : b.lost ? "lost" : ""}</td></tr>`);
+  for (const b of sorted) rows.push(`<tr><td>${esc(b.name)}</td><td class="r">${money(b.stake)}</td><td class="r">${b.out ? fx(b.out) : b.lost ? "—" : "riding"}</td><td class="r ${b.out ? "w" : b.lost ? "l" : ""}">${b.out ? money(b.win) : b.lost ? "lost" : ""}</td></tr>`);
   $("crewBody").innerHTML = rows.join("");
   $("crewCount").textContent = `${S.bots.length + Object.values(S.panels).filter((p) => p.bet > 0).length} divers`;
   $("crewStake").textContent = `${money(S.bots.reduce((a, b) => a + b.stake, 0))} at stake`;
@@ -887,12 +905,14 @@ async function verify(i) {
   const r = S.fair[i];
   const o = await outcome(r.server_seed, r.client_seed, r.nonce);
   const hashOk = (await sha256(r.server_seed)) === r.server_seed_hash, crashOk = o.crash === r.result_multiplier;
-  const { surge, ...payload } = r;
+  const { surge, ...local } = r;
+  let payload = local;
+  if (net) try { const res = await fetch("/api/v1/provably-fair/verify?round_id=" + encodeURIComponent(r.round_id)); if (res.ok) payload = await res.json(); } catch { /* show the revealed record instead */ }
   $("verifyOut").innerHTML = `<p class="note">GET /api/v1/provably-fair/verify?round_id=${r.round_id}</p><pre class="json"></pre><p class="note">Seed hash <span class="${hashOk ? "ok" : "bad"}">${hashOk ? "matches" : "does not match"}</span>. Recomputed crash ${fx(o.crash)} <span class="${crashOk ? "ok" : "bad"}">${crashOk ? "matches" : "does not match"}</span>. HMAC ${o.hash.slice(0, 16)}…</p>`;
   $("verifyOut").querySelector("pre").textContent = JSON.stringify(payload, null, 2);
 }
 function renderWallet() {
-  $("wlog").innerHTML = S.wlog.map((w) => `<div><div class="ep"><b class="${w.kind === "debit" ? "" : "c"}">${w.ep}</b> → 200 OK</div><pre class="json">${JSON.stringify(w.payload, null, 2)}</pre></div>`).join("") || `<p class="note">No transactions yet. Place a bet to see the debit call.</p>`;
+  $("wlog").innerHTML = S.wlog.map((w) => `<div><div class="ep"><b class="${w.kind === "debit" ? "" : "c"}">${w.ep}</b> → 200 OK</div><pre class="json">${esc(JSON.stringify(w.payload, null, 2))}</pre></div>`).join("") || `<p class="note">No transactions yet. Place a bet to see the debit call.</p>`;
 }
 function renderMath() {
   $("mathTbl").innerHTML = `<tr><th>Zone</th><th>Chance</th><th>Pays</th><th>Surge</th><th>RTP</th></tr>` +
@@ -1141,7 +1161,8 @@ function hud(now) {
 /* ---------- main loop ---------- */
 function frame(now) {
   const t = now - S.phaseStart;
-  if (S.phase === "betting" && t >= BET_MS && S.ready) startLaunch(now);
+  if (net) { if (S.phase === "descent") S.mult = Math.exp(S.k * t / 1000); }
+  else if (S.phase === "betting" && t >= BET_MS && S.ready) startLaunch(now);
   else if (S.phase === "launch" && t >= LAUNCH_MS) startDescent(now);
   else if (S.phase === "descent") {
     const raw = Math.exp(S.k * t / 1000);
@@ -1150,7 +1171,7 @@ function frame(now) {
     if (raw >= S.crash) crash(now); else S.mult = raw;
   } else if (S.phase === "crashed" && t >= CRASH_MS) startBetting(now);
 
-  if (now > nextBotChat && (S.phase === "betting" || S.phase === "descent")) {
+  if (!net && now > nextBotChat && (S.phase === "betting" || S.phase === "descent")) {
     nextBotChat = now + 2500 + rand() * 4500;
     botChat(pick(NAMES), pick(BOT_LINES[S.phase]));
     if (rand() < 0.5) reaction(pick(EMOJI), false);
@@ -1158,6 +1179,174 @@ function frame(now) {
   hud(now); updatePanels(false); renderCrew(); audio.tick(now);
   if (W > 0) draw(now);
   requestAnimationFrame(frame);
+}
+
+/* ---------- network mode (page served by the Node game server) ---------- */
+// The server owns timing, outcomes and settlement; this client only renders and sends intents.
+let net = null;
+const panelOf = (v) => (v === "PANEL_A" || v === "A" ? "A" : v === "PANEL_B" || v === "B" ? "B" : null);
+function netPlace(id) {
+  const p = S.panels[id];
+  p.pending = true;
+  net.send({ action: "bet", panel: "PANEL_" + id, amount: readStake(id), auto_cashout: p.auto ? p.autoVal : null });
+}
+function netAction(id) {
+  const p = S.panels[id];
+  if (p.pending) return;
+  if (S.phase === "betting") {
+    if (p.state === "placed") { p.pending = true; net.send({ action: "cancel", panel: "PANEL_" + id }); }
+    else netPlace(id);
+  } else if (S.phase === "descent" && p.state === "placed") {
+    p.pending = true; p.sentAt = performance.now();
+    net.send({ action: "cashout", panel: "PANEL_" + id, round_id: S.roundId, client_timestamp: Date.now() });
+  } else if (p.state !== "placed") p.queued = !p.queued;
+  updatePanels(true);
+}
+function netAuto(id) {
+  const p = S.panels[id];
+  if (net && p.state === "placed") net.send({ action: "set_auto", panel: "PANEL_" + id, auto_cashout: p.auto ? p.autoVal : null });
+}
+function applyRound(r) {
+  S.roundId = r.round_id; S.roundNo = r.nonce; S.nonce = r.nonce;
+  S.serverSeedHash = r.server_seed_hash; S.clientSeed = r.client_seed;
+  if (typeof r.jackpot === "number") S.jackpot = r.jackpot;
+  S.phase = r.phase; S.phaseStart = performance.now() - r.phase_elapsed_ms;
+  S.surge = !!r.surge; S.k = r.k ?? K_BASE;
+  if (r.crash) { S.crash = r.crash; S.cause = r.cause; S.mult = r.crash; } else if (r.phase !== "descent") S.mult = 1;
+  $("roundLabel").textContent = S.roundId;
+  $("surgeBanner").hidden = !(S.surge && (r.phase === "launch" || r.phase === "descent"));
+  renderFairHead(); renderBalance();
+}
+const fromCrew = (crew) => crew.filter((c) => !c.pid || c.pid !== S.playerId).map((c) => ({ name: c.name, stake: c.stake, out: c.out, win: c.win, lost: c.lost }));
+const walletEntry = (w) => ({ ep: w.endpoint, kind: w.endpoint.split("/").pop(), payload: w.payload });
+const NET_HANDLERS = {
+  welcome(m) {
+    S.playerId = m.player_id; store.set("dsd.pid", m.player_id);
+    BET_MS = m.config.bet_ms; LAUNCH_MS = m.config.launch_ms; CRASH_MS = m.config.crash_ms;
+    S.balance = m.balance; S.history = m.history; S.bots = fromCrew(m.crew); S.fair = [];
+    S.wlog = m.wallet_log.map(walletEntry);
+    for (const id of ["A", "B"]) {
+      const p = S.panels[id], srv = m.panels[id];
+      p.pending = false; p.state = srv ? srv.state : "idle"; p.bet = srv ? srv.amount : 0;
+    }
+    S.side = { ...m.sides }; S.sideResult = null;
+    daily.spun = m.wheel_used; spinning = false;
+    applyRound(m.round);
+    if (m.rain) sonarRain(m.rain);
+    $("clientSeed").disabled = $("seedBtn").disabled = true;
+    renderHistory(); renderZones(); renderMissions(); renderFairRounds(); renderWallet(); S.crewDirty = true; updatePanels(true);
+    sysChat(`Connected to the game server as ${m.name}. Everyone here rides the same dive.`);
+  },
+  round_betting(m) {
+    applyRound(m);
+    S.side = { sun: 0, twi: 0, mid: 0, aby: 0 }; S.sideResult = null;
+    for (const p of Object.values(S.panels)) {
+      p.state = "idle"; p.bet = 0; p.pending = false;
+      if (p.queued) { p.queued = false; netPlace(p.id); }
+    }
+    renderZones(); updatePanels(true);
+  },
+  round_launch(m) {
+    applyRound(m);
+    if (S.surge) sysChat("Pressure Surge detected. Climb rate doubled, side-bet payouts doubled.");
+    renderZones(); audio.throttle();
+  },
+  round_descent(m) { applyRound(m); },
+  tick(m) {
+    if (m.round_id !== S.roundId || S.phase !== "descent") return;
+    const startAt = performance.now() - m.phase_elapsed_ms;
+    if (Math.abs(startAt - S.phaseStart) > 40) S.phaseStart = startAt; // resync drift
+  },
+  round_crash(m) {
+    if (Object.values(S.panels).some((p) => p.state === "placed" || p.state === "cashed")) bumpMission("dives");
+    applyRound(m);
+    S.history = m.history; S.sideResult = m.zone;
+    S.fair.unshift({ round_id: m.round_id, server_seed: m.server_seed, server_seed_hash: m.server_seed_hash, client_seed: m.client_seed, nonce: m.nonce, result_multiplier: m.crash, surge: m.surge });
+    if (S.fair.length > 30) S.fair.pop();
+    renderHistory(); renderFairRounds(); renderZones(); audio.implode();
+  },
+  bet_ack(m) {
+    const p = S.panels[panelOf(m.panel)];
+    p.pending = false; p.state = "placed"; p.bet = m.amount;
+    setStatus(p, `${money(m.amount)} on board${m.auto_cashout ? `, auto cash-out at ${fx(m.auto_cashout)}` : ", manual cash-out"}.`, "");
+  },
+  cancel_ack(m) { const p = S.panels[panelOf(m.panel)]; p.pending = false; p.state = "idle"; p.bet = 0; setStatus(p, "Bet cancelled and refunded.", ""); },
+  cashout_ack(m) {
+    const p = S.panels[panelOf(m.panel)];
+    p.pending = false; p.state = "cashed";
+    const rtt = m.mode === "manual" && p.sentAt ? ` · round trip ${Math.round(performance.now() - p.sentAt)} ms` : "";
+    setStatus(p, `Cashed ${money(m.payout_amount)} at ${fx(m.multiplier_executed)} (${m.mode})${rtt}`, "win");
+    if (m.multiplier_executed >= 5) bumpMission("m5x");
+    audio.cash();
+  },
+  bet_lost(m) { const p = S.panels[panelOf(m.panel)]; p.pending = false; p.state = "lost"; setStatus(p, `Imploded at ${fx(m.crash)}. Lost ${money(m.amount)}.`, "loss"); },
+  auto_ack() {},
+  side_ack(m) { S.side = { ...m.sides }; renderZones(); },
+  side_result(m) {
+    const z = ZONES.find((x) => x.id === m.zone) || ZONES[0];
+    if (m.win > 0) { toast(`Sonar hit: ${z.name} pays ${money(m.win)}`); bumpMission("side"); }
+    else if (m.staked > 0) toast(`Sonar miss: dive ended in the ${z.name}`);
+  },
+  wallet_tx(m) {
+    S.wlog.unshift(walletEntry(m));
+    if (S.wlog.length > 40) S.wlog.pop();
+    S.balance = m.balance; renderBalance();
+    if (activeTab === "wallet") renderWallet();
+  },
+  crew(m) { S.bots = fromCrew(m.crew); S.crewDirty = true; },
+  cashout_event(m) {
+    if (m.pid && m.pid === S.playerId) { if (m.payout >= 50 || m.multiplier >= 10) feed(`You cashed out <b>${money(m.payout)}</b> at ${fx(m.multiplier)}`); }
+    else if (m.payout >= 150 || (m.multiplier >= 25 && m.payout >= 20)) feed(`${esc(m.name)} cashed out <b>${money(m.payout)}</b> at ${fx(m.multiplier)}`);
+  },
+  chat(m) {
+    if (m.system) return sysChat(m.text);
+    if (m.pid && m.pid === S.playerId) { const d = document.createElement("div"); d.className = "msg me"; d.innerHTML = "<b>You</b> "; d.append(m.text); pushChat(d); }
+    else botChat(m.name, m.text);
+  },
+  reaction(m) { reaction(m.emoji, m.pid === S.playerId); },
+  sonar_rain(m) { sonarRain(m); },
+  rain_ack(m) { S.rainUi?.caught(`${money(m.amount)} added to your balance.`); },
+  jackpot_drop(m) { S.jackpot = m.jackpot; renderBalance(); feed(`JACKPOT DROP <b>${money(m.pool)}</b> shared by ${m.riders} divers past 500x`, true); },
+  jackpot_share(m) { toast(`Jackpot drop! Your share: ${money(m.amount)}`); },
+  wheel_result(m) { animateWheel(m.index, () => {}); },
+  wallet_reset() { toast("Play wallet reset to €1,000.00."); },
+  pong() {},
+  error(m) {
+    const id = panelOf(m.panel);
+    if (id) { S.panels[id].pending = false; return setStatus(S.panels[id], m.message, "loss"); }
+    if (m.ref === "rain_catch" && S.rainUi) return S.rainUi.fail(m.message, m.code !== "RAIN_NOT_QUALIFIED");
+    if (m.ref === "wheel_spin") { spinning = false; if (m.code === "WHEEL_USED") { daily.spun = true; store.set("dsd.daily", daily); } renderWheelState(); }
+    toast(m.message);
+  },
+};
+/** Resolves true once the server has welcomed us, false if it can't be reached (then the page plays offline). */
+function connectNet() {
+  return new Promise((resolve) => {
+    const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + window.DSD_SERVER;
+    let welcomed = false, attempt = 0;
+    const open = () => {
+      let ws;
+      try { ws = new WebSocket(url); } catch { return resolve(false); }
+      const giveUp = setTimeout(() => { if (!welcomed) ws.close(); }, 4000);
+      net = { send(msg) { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); else toast("Reconnecting to the game server…"); } };
+      ws.onopen = () => ws.send(JSON.stringify({ action: "hello", player_id: store.get("dsd.pid", null) }));
+      ws.onmessage = (e) => {
+        let m;
+        try { m = JSON.parse(e.data); } catch { return; }
+        if (m.action === "welcome") { clearTimeout(giveUp); attempt = 0; if (!welcomed) { welcomed = true; resolve(true); } }
+        NET_HANDLERS[m.action]?.(m);
+      };
+      ws.onclose = () => {
+        clearTimeout(giveUp);
+        if (!welcomed) return resolve(false);
+        S.phase = "boot";
+        for (const p of Object.values(S.panels)) p.pending = false;
+        updatePanels(true);
+        setTimeout(open, Math.min(8000, 1000 * 2 ** attempt++));
+      };
+    };
+    open();
+  });
 }
 
 /* ---------- wiring ---------- */
@@ -1171,7 +1360,7 @@ function wire() {
   }
   for (const e of EMOJI) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = e; b.setAttribute("aria-label", "React " + e);
-    b.onclick = () => reaction(e, true); $("emojibar").appendChild(b);
+    b.onclick = () => (net ? net.send({ action: "reaction", emoji: e }) : reaction(e, true)); $("emojibar").appendChild(b);
   }
   $("zones").addEventListener("click", (e) => { const z = e.target.closest("[data-zone]"); if (z) addSide(z.dataset.zone); });
   document.querySelectorAll("[data-side-step]").forEach((b) => b.addEventListener("click", () => {
@@ -1181,6 +1370,7 @@ function wire() {
   $("chatform").addEventListener("submit", (e) => {
     e.preventDefault();
     const v = $("chatInput").value.trim(); if (!v) return;
+    if (net) { net.send({ action: "chat", text: v }); $("chatInput").value = ""; return; }
     const d = document.createElement("div"); d.className = "msg me"; d.innerHTML = "<b>You</b> "; d.append(v); pushChat(d);
     $("chatInput").value = ""; S.lastActive = performance.now();
     if (rand() < 0.6) setTimeout(() => botChat(pick(NAMES), pick(["good luck on the dive", "🫡", "same", "let's go deep", "captain says hi"])), 900 + rand() * 1500);
@@ -1198,6 +1388,7 @@ function wire() {
   $("resetDaily").onclick = () => { daily.progress = { m5x: 0, side: 0, dives: 0 }; daily.spun = false; store.set("dsd.daily", daily); renderMissions(); toast("Daily missions and wheel reset."); };
   $("soundBtn").onclick = () => { const on = audio.toggle(); $("soundBtn").textContent = on ? "Sound on" : "Sound off"; $("soundBtn").setAttribute("aria-pressed", on); };
   $("resetBtn").onclick = () => {
+    if (net) return net.send({ action: "reset_wallet" });
     const diff = cents(1000 - S.balance);
     if (diff > 0) wallet("credit", diff, { type: "demo_topup" }); else if (diff < 0) wallet("debit", -diff, { type: "demo_reset" });
     toast("Play wallet reset to €1,000.00.");
@@ -1212,11 +1403,22 @@ function start(data) {
   if (data.wlog) S.wlog = data.wlog;
   if (data.jackpot) S.jackpot = data.jackpot;
   wire();
+  renderBalance(); renderHistory();
   sysChat("Welcome aboard. The Captain launches a dive roughly every 25 seconds.");
   sysChat("Panel A suits a low auto cash-out; Panel B is for chasing the trench.");
+  requestAnimationFrame(frame);
+  if (window.DSD_SERVER) {
+    connectNet().then((ok) => {
+      if (ok) return;
+      net = null;
+      toast("The game server is unreachable. Playing an offline simulation.");
+      startOffline();
+    });
+  } else startOffline();
+}
+function startOffline() {
   window.claude?.hot?.snapshot?.(() => ({ balance: S.balance, history: S.history, fair: S.fair, wlog: S.wlog, jackpot: S.jackpot }));
   startBetting(performance.now());
-  requestAnimationFrame(frame);
 }
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 })();
