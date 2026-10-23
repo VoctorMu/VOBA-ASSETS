@@ -9,7 +9,7 @@ risk_per_trade_pct per trade. Spread, slippage and the daily cap are not modelle
 
 Two steps: first every candidate setup on every symbol is found and played out on its own; then the
 candidates are replayed in time order through the live selection rules (score bar, trades per week,
-one open trade per symbol). Because the first step keeps every candidate, the report can show what
+one open trade per symbol if risk.one_position_per_symbol is set). Because the first step keeps every candidate, the report can show what
 each score bar would have produced: that table is how you calibrate selection.min_score.
 """
 from __future__ import annotations
@@ -65,13 +65,13 @@ def candidates(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame
     return out
 
 
-def select(cands: list[dict], min_score: int, per_week: int | None) -> list[dict]:
+def select(cands: list[dict], min_score: int, per_week: int | None, one_per_symbol: bool = False) -> list[dict]:
     """Replay candidates in time order through the live selection rules."""
     from .engine import week_start
 
     taken, busy, weekly = [], {}, {}
     for c in sorted(cands, key=lambda c: c["time"]):
-        if c["score"] < min_score or busy.get(c["symbol"], 0) > c["time"]:
+        if c["score"] < min_score or (one_per_symbol and busy.get(c["symbol"], 0) > c["time"]):
             continue
         wk = week_start(c["time"])
         if per_week and weekly.get(wk, 0) >= per_week:
@@ -82,10 +82,10 @@ def select(cands: list[dict], min_score: int, per_week: int | None) -> list[dict
     return taken
 
 
-def calibration_table(cands: list[dict], weeks: float, per_week: int | None) -> str:
+def calibration_table(cands: list[dict], weeks: float, per_week: int | None, one_per_symbol: bool) -> str:
     rows = []
     for bar in (0, 40, 50, 60, 70, 80):
-        taken = select(cands, bar, per_week)
+        taken = select(cands, bar, per_week, one_per_symbol)
         r = np.array([c["R"] for c in taken]) if taken else np.array([0.0])
         rows.append(f"  {bar:>3}+   {len(taken) / weeks:6.2f}   {len(taken):5d}   "
                     f"{(r > 0).mean() * 100 if taken else 0:5.1f}%   {r.mean() if taken else 0:+6.2f}   "
@@ -96,7 +96,8 @@ def calibration_table(cands: list[dict], weeks: float, per_week: int | None) -> 
         b = np.array([c["R"] for c in cands if lo_ <= c["score"] < hi_])
         if len(b):
             buckets.append(f"  {lo_:>3}-{min(hi_, 100) - 1:<3}  {len(b):5d}   {(b > 0).mean() * 100:5.1f}%   {b.mean():+6.2f}")
-    return "\n".join(["Score bar -> trades taken (with the weekly limit and one trade per symbol):", head, *rows,
+    rule = " and one trade per symbol" if one_per_symbol else ""
+    return "\n".join([f"Score bar -> trades taken (with the weekly limit{rule}):", head, *rows,
                       "", "Every candidate by score (does a higher score really mean better trades?):",
                       "  score   count    win%   avg R", *buckets])
 
@@ -159,10 +160,11 @@ def main():
         print(f"{s}: {len(found)} candidate setups", flush=True)
         cands += found
     weeks = max(1.0, max(len(frames[s][0]) - 300 for s in symbols) / 42)   # 4H bars, 24/7 market
-    taken = select(cands, min_score, per_week)
+    one = bool(cfg["risk"].get("one_position_per_symbol"))
+    taken = select(cands, min_score, per_week, one)
     risk_pct = cfg["risk"]["risk_per_trade_pct"]
     print(f"\n== {weeks:.0f} weeks · {len(cands)} candidates ({len(cands) / weeks:.2f}/week before selection)")
-    print(calibration_table(cands, weeks, per_week))
+    print(calibration_table(cands, weeks, per_week, one))
     print(f"\n== Your settings: score >= {min_score}, max {per_week or 'unlimited'}/week -> "
           f"{len(taken) / weeks:.2f} trades/week")
     print(summarise(taken, risk_pct))

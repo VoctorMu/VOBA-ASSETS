@@ -23,7 +23,7 @@ A setup is only taken when **all** of these are true on the latest *closed* 4H c
 |---|-------|--------|
 | 1 | **Daily trend** sets the direction | Price above the 50 EMA without a lower-high + lower-low structure (bullish), or the mirror image (bearish). |
 | 2 | **Weekly trend** not against it | Same test on the Weekly. It may agree or be flat, but not point the other way. Set `strategy.htf.weekly: agree` to require full agreement. |
-| 3 | **4H setup** in that direction | **M** (double top) / **W** (double bottom), **head & shoulders** / inverse H&S with a close through the neckline, **or** regular **RSI(14) divergence**. Must be recent (within `setup_window` candles). |
+| 3 | **4H setup** in that direction | **M** (double top) / **W** (double bottom), **head & shoulders** / inverse H&S with a close through the neckline, **or** regular **RSI(14) divergence**. May be up to 5 days old (`setup_window: 30` candles). |
 | 4 | **AMD complete** | **A**ccumulation: a tight 4H range. **M**anipulation: a wick sweeps one side of the range and the candle closes back inside (a stop hunt). **D**istribution: a 4H candle *closes* beyond the opposite side. |
 | 5 | **4H close confirmation** | The candle that just closed must be the AMD break or the pattern's neckline break. The engine never chases a setup that confirmed earlier. |
 
@@ -83,7 +83,7 @@ If higher scores *don't* do better on real data, the score weights in `strategy.
 before you rely on them.
 
 **More setups per week** needs a wider net, and each step also lets in lower-quality trades:
-`strategy.setup_window` (how many 4H candles ago a pattern may be: 12 = 2 days, 30 = 5 days),
+`strategy.setup_window` (how many 4H candles ago a pattern may be: now 30 = 5 days),
 `strategy.amd.max_range_atr` (looser accumulation ranges), or a lower `min_score`.
 
 ## Risk management

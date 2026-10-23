@@ -48,12 +48,13 @@ strategy:
   swing_window: 3             # bars each side to confirm a 4H swing point
   atr_period: 14
   rsi_period: 14
-  setup_window: 12            # a pattern/divergence must be this recent (4H bars) to count
+  setup_window: 30            # a pattern/divergence may be up to 30 4H candles old (5 days) to count
   pattern:
     peak_tolerance_atr: 0.75  # M/W peaks within this many ATRs are "equal"
     min_height_atr: 2.0       # pattern must be at least this tall
     shoulder_tolerance_atr: 1.5
     hs_stop: right_shoulder   # right_shoulder | head
+    max_bars_to_break: 24     # neckline must break within 24 candles of the last swing
   divergence:
     min_bars: 5
     max_bars: 60
@@ -63,6 +64,7 @@ strategy:
     max_range_bars: 30
     max_range_atr: 3.5        # accumulation range must be this tight
     max_bars_to_break: 12     # distribution must follow the sweep within N bars
+    recent_bars: 12           # the AMD break must be within the last 12 candles (2 days)
   htf:
     weekly: not_against       # not_against = Daily leads, Weekly may be flat | agree = both must match
     ema_period: 50

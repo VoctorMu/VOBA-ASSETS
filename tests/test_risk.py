@@ -84,5 +84,7 @@ def test_backtest_selection_applies_bar_weekly_limit_and_one_per_symbol():
              c("A", 0.6, 95, 2),                     # A still busy until day 1
              c("C", 1, 70, 3), c("D", 2, 99, 3),     # D: weekly limit (2) already used
              c("D", 7, 65, 8)]                       # next week
-    taken = select(cands, 60, 2)
+    taken = select(cands, 60, 2, one_per_symbol=True)
     assert [(t["symbol"], t["time"]) for t in taken] == [("A", mon), ("C", mon + 86400), ("D", mon + 7 * 86400)]
+    taken = select(cands, 60, 2)                 # live default: a second A setup may open while A is still running
+    assert [(t["symbol"], t["time"]) for t in taken] == [("A", mon), ("A", mon + 0.6 * 86400), ("D", mon + 7 * 86400)]

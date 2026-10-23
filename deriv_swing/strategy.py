@@ -79,7 +79,7 @@ def analyse(symbol: str, h4: pd.DataFrame, d1: pd.DataFrame, w1: pd.DataFrame, c
     an.patterns = [p for p in find_patterns(h4, an.swings, atr_s, scfg) if p.break_idx >= last - window]
     an.divergences = [d for d in find_divergences(an.swings, rsi_s, scfg["swing_window"], scfg)
                       if d.confirm_idx >= last - window]
-    an.amds = find_amd(h4, atr_s, scfg, window)
+    an.amds = find_amd(h4, atr_s, scfg, scfg["amd"].get("recent_bars", 12))
 
     direction = an.bias_d1
     if direction == 0:

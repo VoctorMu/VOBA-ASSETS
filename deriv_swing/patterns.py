@@ -54,7 +54,7 @@ def _find_break(close, extreme_series, start, direction, neckline, invalid_level
 
 def find_patterns(df: pd.DataFrame, swings: list[Swing], atr: pd.Series, cfg: dict) -> list[Pattern]:
     pcfg = cfg["pattern"]
-    max_break = cfg["setup_window"] * 2
+    max_break = pcfg.get("max_bars_to_break", 24)
     close = df["close"].to_numpy()
     high = df["high"].to_numpy()
     low = df["low"].to_numpy()

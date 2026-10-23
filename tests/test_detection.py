@@ -121,3 +121,14 @@ def test_score_rewards_confluence():
                                  105.0, 97.8, 2.0, 2.0, S)
     assert 0 <= weak < strong <= 100
     assert any("Weekly agrees" in p for p in parts) and any("same candle" in p for p in parts)
+
+
+def test_setup_window_five_days():
+    from deriv_swing.strategy import analyse
+    # M pattern breaks, then ~20 quiet candles pass (older than 2 days, younger than 5)
+    df = candles(list(path([(0, 100), (100, 100), (10, 120), (6, 110), (6, 120), (10, 100)])) + [100.0] * 20)
+    c = cfg()
+    c["strategy"]["setup_window"] = 12
+    assert not analyse("X", df, df, df, c).patterns
+    c["strategy"]["setup_window"] = 30
+    assert [p.name for p in analyse("X", df, df, df, c).patterns] == ["double_top"]
