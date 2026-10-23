@@ -33,6 +33,10 @@ risk:
   reward_risk: 5.0            # take profit = 5 x stop distance
   daily_loss_cap_pct: 6.0     # no new trades once a stop-out would breach -6% for the day
   one_position_per_symbol: false
+  breakeven:
+    enabled: true
+    trigger_r: 2.0            # once price is 2R in profit, move the stop...
+    lock_r: 0.0               # ...to entry + this many R (0 = exact break-even)
   paper_starting_balance: 10000
 
 strategy:
@@ -65,6 +69,12 @@ engine:
   h4_bars: 600
   d1_bars: 400
   w1_bars: 200
+
+telegram:
+  enabled: false
+  bot_token: ""               # from @BotFather
+  chat_id: ""                 # run: python -m deriv_swing.notify --find-chat
+  notify_rejections: false    # also alert when a signal is refused (cap, min lot, ...)
 
 dashboard:
   host: "127.0.0.1"           # use 0.0.0.0 only together with a token

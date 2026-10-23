@@ -9,7 +9,7 @@ from deriv_swing.data import MT5Feed
 
 class FakeMT5:
     TIMEFRAME_H4, TIMEFRAME_D1, TIMEFRAME_W1 = 16388, 16408, 32769
-    TRADE_ACTION_DEAL, ORDER_TYPE_BUY, ORDER_TYPE_SELL = 1, 0, 1
+    TRADE_ACTION_DEAL, TRADE_ACTION_SLTP, ORDER_TYPE_BUY, ORDER_TYPE_SELL = 1, 6, 0, 1
     ORDER_TIME_GTC, ORDER_FILLING_FOK, ORDER_FILLING_IOC, ORDER_FILLING_RETURN = 0, 0, 1, 2
     TRADE_RETCODE_DONE, POSITION_TYPE_BUY = 10009, 0
     DEAL_ENTRY_IN, DEAL_ENTRY_OUT, DEAL_TYPE_BUY, DEAL_REASON_SL, DEAL_REASON_TP = 0, 1, 0, 4, 5
@@ -37,7 +37,7 @@ class FakeMT5:
 
     def order_send(self, req):
         self.sent.append(req)
-        return NS(retcode=self.TRADE_RETCODE_DONE, order=42, price=req["price"], comment="done")
+        return NS(retcode=self.TRADE_RETCODE_DONE, order=42, price=req.get("price", 0.0), comment="done")
 
     def positions_get(self):
         return [NS(ticket=42, symbol="V75", type=0, volume=0.01, price_open=400_010.0, sl=395_000.0, tp=425_000.0,
@@ -72,4 +72,8 @@ def test_broker_roundtrip():
     assert [p.ticket for p in b.open_positions()] == [42]           # manual trade ignored
     closed = b.closed_trades()
     assert closed[0].reason == "sl" and closed[0].direction == 1
+    pos = b.open_positions()[0]
+    assert b.modify_sl(pos, 400_010.004).ok
+    assert mt5.sent[-1]["action"] == 6 and mt5.sent[-1]["position"] == 42 and mt5.sent[-1]["sl"] == 400_010.0
+    assert mt5.sent[-1]["tp"] == 425_000.0
     assert b.close_all() == 1 and mt5.sent[-1]["position"] == 42

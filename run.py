@@ -11,6 +11,7 @@ from deriv_swing.broker import MT5Broker, PaperBroker
 from deriv_swing.config import ROOT, load_config
 from deriv_swing.data import MT5Feed, SyntheticFeed
 from deriv_swing.engine import Engine
+from deriv_swing.notify import Notifier
 from deriv_swing.server import create_app
 
 
@@ -50,7 +51,10 @@ def main():
     else:
         broker = PaperBroker(feed, cfg["risk"]["paper_starting_balance"], state_dir / "paper.json")
 
-    engine = Engine(cfg, feed, broker, state_dir)
+    notifier = Notifier(cfg["telegram"])
+    engine = Engine(cfg, feed, broker, state_dir, notifier)
+    notifier.send(f"🚀 Deriv Swing started · {cfg['execution'].upper()} orders · {cfg['data_source']} data · "
+                  f"{len(cfg['symbols'])} symbols")
     app = create_app(engine, cfg)
     uvicorn.run(app, host=cfg["dashboard"]["host"], port=cfg["dashboard"]["port"], log_level="warning")
 

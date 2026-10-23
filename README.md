@@ -41,6 +41,7 @@ pattern's invalidation point (the right shoulder or the M/W peak). A small ATR b
 |---|---|
 | Risk per trade | **2%** of equity. Lot size is calculated from the stop distance and the symbol's tick value, always **rounded down**. |
 | Reward : risk | **1 : 5** |
+| Break-even | Once price is **2R** in profit, the stop moves to the entry price, so from then on the trade can't lose. That also frees its risk from the daily cap, so the bot can take another setup. Settings are under `risk.breakeven` (`trigger_r`, `lock_r`, `enabled`). |
 | Daily loss cap | **−6%**. A trade is refused if *today's loss + the risk on all open trades + this trade* could exceed 6%. In practice that means at most three full-risk trades at a time and no revenge trading after a bad day. |
 | Too-big minimum lot | If the broker's minimum lot would risk more than 2%, the trade is skipped, never forced. |
 | Duplicates | Each AMD setup trades once (it is logged in `state/.../journal.sqlite`). |
@@ -54,6 +55,34 @@ What 2% at 1:5 means in numbers:
 The bot only manages positions that carry its own `magic` number, so manual trades on the same account are left alone.
 
 ---
+
+Break-even works like a seatbelt you click on halfway through the journey. You give up some trades that would
+have dipped back and then gone on to 5R, in exchange for never losing on a trade that already ran 2R your way.
+Run `python -m deriv_swing.backtest --mt5` and the same command with `--no-breakeven` to see which suits these
+indices better.
+
+## Telegram alerts
+
+You get a message when:
+
+| Event | Example |
+|---|---|
+| Trade opened | 🟢 BUY Volatility 75 Index: entry, SL, TP, lots, $ risk, and why it was taken |
+| Stop moved to break-even | 🛡️ Break-even #12: price reached 2R; stop moved to entry |
+| Trade closed | 🏆 Take profit hit +5.0R · ⚪ Closed at break-even +0.0R · ❌ Stop loss hit −1.0R |
+| Daily cap hit | 🛑 No new trades until tomorrow (UTC) |
+| Engine started / symbol errors | 🚀 / ⚠️ |
+| Signal refused (optional) | ⏭️ Set `notify_rejections: true` |
+
+Setup (takes about 2 minutes):
+
+1. In Telegram, message **@BotFather**, send `/newbot` and follow the prompts. Copy the **token** it gives you.
+2. Put the token in `config.yaml` under `telegram.bot_token`, then send any message to your new bot.
+3. Run `python -m deriv_swing.notify --find-chat` and copy the `chat_id` it prints into `telegram.chat_id`.
+4. Set `telegram.enabled: true` and run `python -m deriv_swing.notify --test`. You should get a ✅ message.
+
+The token stays in `config.yaml`, which git ignores. Alerts are sent in the background, so if Telegram is down the
+bot keeps trading.
 
 ## Install on a Windows VPS
 
@@ -111,6 +140,7 @@ deriv_swing/
   broker.py                 PaperBroker and MT5Broker
   data.py                   MT5 candles, or a synthetic feed for testing
   journal.py                SQLite log of every signal and why it was taken or refused
+  notify.py                 Telegram alerts (+ --find-chat / --test helpers)
   backtest.py               bar-by-bar replay of the live rules
   server.py, static/        FastAPI + dashboard (TradingView Lightweight Charts, bundled)
 tests/                      pytest: detectors on hand-built charts, sizing, cap, engine, API
@@ -123,7 +153,9 @@ Run the tests with `pip install -r requirements-dev.txt && python -m pytest`.
 - Paper mode checks SL/TP at each poll (every 30 s), not on every tick, so paper fills are approximate.
 - The backtest assumes the stop is hit first when one candle touches both SL and TP. It doesn't model spread
   or the daily cap, so treat its results as optimistic.
-- The bot does not trail stops or take partial profits; each trade runs to its SL or its 5R target.
+- Beyond the single break-even move, the bot does not trail stops or take partial profits.
+- The backtest moves the stop to break-even from the candle *after* the one that reached 2R, because 4H
+  candles don't show whether the high or the low came first.
 
 Charts use [TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/) (Apache 2.0).
 Trading synthetic indices carries a high risk of loss. This software is a tool, not financial advice.

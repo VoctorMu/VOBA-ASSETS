@@ -125,7 +125,9 @@ def create_app(engine: Engine, cfg: dict, run_engine: bool = True) -> FastAPI:
                     "reward_risk": cfg["risk"]["reward_risk"],
                     "daily_cap_pct": g.cap_pct, "day": g.day, "day_start_equity": g.start_equity,
                     "day_loss_pct": g.loss_pct(acct.equity),
+                    "breakeven": cfg["risk"].get("breakeven", {}),
                 },
+                "telegram": engine.notifier.enabled,
                 "symbols": symbols,
             }
 

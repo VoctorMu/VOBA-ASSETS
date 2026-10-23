@@ -96,3 +96,104 @@ def test_api(tmp_path, monkeypatch):
     assert client.post("/api/control", json={"action": "close_all"}, headers=h).json()["closed"] == 1
     assert client.get("/api/status", headers=h).json()["paused"] is True
     assert client.get("/").status_code == 200
+
+
+class Collector:
+    def __init__(self):
+        self.msgs = []
+
+    def __call__(self, text):
+        self.msgs.append(text)
+
+
+def with_alerts(eng, notify_rejections=False):
+    from deriv_swing.notify import Notifier
+    sent = Collector()
+    n = Notifier({"enabled": False, "notify_rejections": notify_rejections}, sender=sent)
+    n.enabled = True
+    n.send = sent            # deliver synchronously for the test
+    eng.notifier = n
+    return sent
+
+
+def test_breakeven_moves_stop_at_2r_once(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch, signal_for=SYMS[:1])
+    sent = with_alerts(eng)
+    eng.step()                                         # BUY @1000, SL 990 -> 1R = 10
+    eng.feed.price = lambda s: (1019.0, 1019.1)        # +1.9R: not yet
+    eng.step()
+    assert broker.open_positions()[0].sl == 990.0
+    eng.feed.price = lambda s: (1020.0, 1020.1)        # +2R
+    eng.step()
+    assert broker.open_positions()[0].sl == 1000.0
+    eng.step()
+    assert sum("Break-even" in m for m in sent.msgs) == 1
+    eng.feed.price = lambda s: (999.0, 999.1)          # reverses: stopped at entry, 0R
+    eng.step()
+    assert broker.open_positions() == []
+    assert broker.closed_trades()[0].profit == 0
+    assert "Closed at break-even" in sent.msgs[-1] and "+0.0R" in sent.msgs[-1]
+
+
+def test_breakeven_disabled(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch, signal_for=SYMS[:1])
+    eng.cfg["risk"]["breakeven"]["enabled"] = False
+    eng.step()
+    eng.feed.price = lambda s: (1030.0, 1030.1)
+    eng.step()
+    assert broker.open_positions()[0].sl == 990.0
+
+
+def test_breakeven_frees_daily_cap(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch)
+    eng.step()
+    assert len(broker.open_positions()) == 3
+    eng.feed.price = lambda s: (1020.0, 1020.1)        # all three reach 2R -> no open risk left
+    eng.step()
+    eng.journal.db.execute("DELETE FROM signals WHERE status='rejected'")
+    eng.last_bar.clear()
+    eng.step()
+    assert len(broker.open_positions()) == 4
+
+
+def test_alerts_for_open_tp_and_rejection(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch)
+    sent = with_alerts(eng, notify_rejections=True)
+    eng.step()
+    opened = [m for m in sent.msgs if m.startswith("🟢")]
+    assert len(opened) == 3 and "SL 990.00" in opened[0] and "TP 1050.00" in opened[0]
+    assert any("Skipped" in m and "cap" in m for m in sent.msgs)
+    eng.feed.price = lambda s: (1051.0, 1051.1)        # TP for all
+    eng.step()
+    assert sum("Take profit hit" in m and "+5.0R" in m for m in sent.msgs) == 3
+
+
+def test_daily_cap_alert_once(tmp_path, monkeypatch):
+    eng, broker = make_engine(tmp_path, monkeypatch)
+    sent = with_alerts(eng)
+    eng.step()
+    eng.feed.price = lambda s: (989.0, 989.1)          # three stops -> -6%
+    eng.step()
+    eng.step()
+    assert sum("Daily loss cap hit" in m for m in sent.msgs) == 1
+
+
+def test_notifier_disabled_without_credentials():
+    from deriv_swing.notify import Notifier
+    sent = Collector()
+    Notifier({"enabled": True, "bot_token": "", "chat_id": "1"}, sender=sent).send("x")
+    assert sent.msgs == []
+
+
+def test_notifier_background_delivery():
+    import time
+
+    from deriv_swing.notify import Notifier
+    sent = Collector()
+    n = Notifier({"enabled": True, "bot_token": "t", "chat_id": "1"}, sender=sent)
+    n.send("hello")
+    for _ in range(50):
+        if sent.msgs:
+            break
+        time.sleep(0.02)
+    assert sent.msgs == ["hello"]

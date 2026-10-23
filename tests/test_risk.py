@@ -43,3 +43,33 @@ def test_daily_guard_resets_next_day():
     assert not g.allows(9_300, 0, 100)[0]
     g.roll("2026-10-24", 9_300)
     assert g.allows(9_300, 0, 100)[0]
+
+
+def test_backtest_scores_breakeven_exit_as_zero(monkeypatch):
+    import pandas as pd
+    from helpers import candles, cfg
+
+    import deriv_swing.backtest as bt
+    from deriv_swing.strategy import Analysis, Signal
+
+    # entry 100, stop 90; candle 2 reaches 120 (2R), candle 3 falls back to 95
+    closes = [100] * 5 + [100, 110, 115, 95, 95]
+    h4 = candles(closes, wick=0)
+    h4.loc[7, "high"] = 120.0
+    calls = {"n": 0}
+
+    def fake(symbol, h, d, w, c):
+        an = Analysis(symbol, int(h["time"].iloc[-1]), 1, 1)
+        if len(h) == 6 and not calls["n"]:
+            calls["n"] += 1
+            an.signal = Signal(symbol, 1, an.bar_time, 100.0, 90.0, "x", ["t"])
+        return an
+
+    monkeypatch.setattr(bt, "analyse", fake)
+    c = cfg()
+    empty = pd.DataFrame({"time": [0], "open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0]})
+    assert [t["R"] for t in bt.run_symbol("X", h4, empty, empty, c, start=5)] == [0.0]
+    calls["n"] = 0
+    c["risk"]["breakeven"]["enabled"] = False
+    h4.loc[8, "low"] = 89.0
+    assert [t["R"] for t in bt.run_symbol("X", h4, empty, empty, c, start=5)] == [-1.0]

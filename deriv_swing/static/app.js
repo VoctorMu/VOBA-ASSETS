@@ -149,6 +149,7 @@ function renderRules(st) {
   $("rules").innerHTML = [
     `<b>${r.risk_per_trade_pct}%</b> of equity risked per trade`,
     `Take profit at <b>${r.reward_risk}×</b> the stop distance`,
+    r.breakeven?.enabled ? `Stop moves to <b>break-even at ${r.breakeven.trigger_r}R</b>` : `Break-even <b>off</b>`,
     `No new trades if today could close worse than <b>-${r.daily_cap_pct}%</b>`,
     `Entries only on a <b>4H close</b> after AMD completes`,
     `4H setups must match the <b>Daily + Weekly</b> trend`,
@@ -171,6 +172,7 @@ function renderStatus(st) {
     `<span class="badge">${st.data_source === "mt5" ? "MT5 data" : "Synthetic data"}</span>`,
     `<span class="badge">${esc(st.account.name)}</span>`,
   ];
+  if (st.telegram) badges.push(`<span class="badge">Telegram ✓</span>`);
   if (st.paused) badges.push(`<span class="badge paused">PAUSED</span>`);
   $("badges").innerHTML = badges.join("");
   $("pauseBtn").textContent = st.paused ? "Resume" : "Pause";

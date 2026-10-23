@@ -33,6 +33,12 @@ class Journal:
                             list(row.values()))
             self.db.commit()
 
+    def by_ticket(self, ticket: int) -> dict | None:
+        with self.lock:
+            cur = self.db.execute("SELECT * FROM signals WHERE ticket=?", (ticket,))
+            row = cur.fetchone()
+            return dict(zip([c[0] for c in cur.description], row)) if row else None
+
     def recent(self, limit: int = 50) -> list[dict]:
         with self.lock:
             cur = self.db.execute("SELECT * FROM signals ORDER BY created DESC LIMIT ?", (limit,))

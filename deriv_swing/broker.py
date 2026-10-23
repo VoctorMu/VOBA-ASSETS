@@ -126,6 +126,14 @@ class PaperBroker:
         self._save()
         return OrderResult(True, p.ticket, price, "paper fill")
 
+    def modify_sl(self, p: Position, sl: float) -> OrderResult:
+        for mine in self.positions:
+            if mine.ticket == p.ticket:
+                mine.sl = sl
+                self._save()
+                return OrderResult(True, p.ticket, sl, "paper modify")
+        return OrderResult(False, message="position not found")
+
     def open_positions(self) -> list[Position]:
         return list(self.positions)
 
@@ -198,6 +206,17 @@ class MT5Broker:
         if res.retcode != mt5.TRADE_RETCODE_DONE:
             return OrderResult(False, message=f"retcode {res.retcode}: {res.comment}")
         return OrderResult(True, res.order, res.price, res.comment)
+
+    def modify_sl(self, p: Position, sl: float) -> OrderResult:
+        mt5 = self.mt5
+        digits = mt5.symbol_info(p.symbol).digits
+        res = mt5.order_send({"action": mt5.TRADE_ACTION_SLTP, "symbol": p.symbol, "position": p.ticket,
+                              "sl": round(sl, digits), "tp": round(p.tp, digits), "magic": self.magic})
+        if res is None:
+            return OrderResult(False, message=f"order_send failed: {mt5.last_error()}")
+        if res.retcode != mt5.TRADE_RETCODE_DONE:
+            return OrderResult(False, message=f"retcode {res.retcode}: {res.comment}")
+        return OrderResult(True, p.ticket, sl, res.comment)
 
     def open_positions(self) -> list[Position]:
         out = []
