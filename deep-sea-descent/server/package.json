@@ -1,0 +1,25 @@
+{
+  "name": "deep-sea-descent-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Server-authoritative WebSocket game server for the Deep Sea Descent crash prototype (play money).",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prestart": "npm run build",
+    "start": "node dist/src/server.js",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "~5.9.3"
+  }
+}
