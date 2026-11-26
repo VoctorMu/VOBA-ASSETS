@@ -1,0 +1,439 @@
+<title>Pig Profit Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+/* Layout: control strip of big levers on top, results (numbers → charts → tables) in the main column, detailed inputs in a side column that drops below on phones. */
+:root{
+  --bg:#F3F6F2; --surface:#FFFFFF; --ink:#1B2A20; --muted:#5D6D62; --line:#DAE2DA;
+  --accent:#B8336A; --accent-soft:#F7DCE7; --plan:#1F6E4A; --plan-soft:#D6EBDF;
+  --alt:#8A6A1F; --cost:#7A8794; --good:#1F7A46; --warn:#A45A00; --bad:#B42318;
+  --herd1:#C2417A; --herd2:#E9A3BF; --herd3:#D9A441; --herd4:#3E8E63;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F1612; --surface:#17211B; --ink:#E5EDE7; --muted:#9AAA9F; --line:#2A3830;
+  --accent:#F07AA6; --accent-soft:#3A1F2B; --plan:#5CC08A; --plan-soft:#1D3527;
+  --alt:#E0B85A; --cost:#8C99A6; --good:#5CC08A; --warn:#F0A54A; --bad:#F2766B;
+  --herd1:#F07AA6; --herd2:#9C5574; --herd3:#E0B85A; --herd4:#5CC08A; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0F1612; --surface:#17211B; --ink:#E5EDE7; --muted:#9AAA9F; --line:#2A3830;
+  --accent:#F07AA6; --accent-soft:#3A1F2B; --plan:#5CC08A; --plan-soft:#1D3527;
+  --alt:#E0B85A; --cost:#8C99A6; --good:#5CC08A; --warn:#F0A54A; --bad:#F2766B;
+  --herd1:#F07AA6; --herd2:#9C5574; --herd3:#E0B85A; --herd4:#5CC08A; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 48px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(1.6rem,3vw,2.2rem);font-weight:800}
+h2{font-size:1.15rem;font-weight:600}
+h3{font-size:.95rem;font-weight:600}
+.num{font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+header p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.btn{font:inherit;font-weight:600;font-size:.85rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.saved{font-size:.8rem;color:var(--muted)}
+
+/* Levers */
+.levers{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 24px}
+.lever{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lever-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.lever label{font-weight:600;font-size:.9rem}
+.lever output{font-family:var(--f-display);font-weight:800;font-size:1.25rem;color:var(--accent)}
+.lever small{color:var(--muted);font-size:.78rem;line-height:1.35}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;font:inherit;font-weight:600;font-size:.85rem;background:transparent;color:var(--ink);border:0;padding:8px 0;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+@media (max-width:960px){.layout{grid-template-columns:minmax(0,1fr)}}
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:700px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .k-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.kpi .k-val{font-family:var(--f-display);font-weight:800;font-size:clamp(1.15rem,2.4vw,1.6rem);overflow-wrap:anywhere}
+.kpi .k-sub{font-size:.8rem;color:var(--muted)}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+
+.alerts{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:.82rem;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid currentColor}
+.chip.ok{color:var(--good)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px}
+.panel-head p{margin:0;color:var(--muted);font-size:.85rem}
+.chart-box{position:relative;height:280px;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+/* Compare */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.compare{grid-template-columns:1fr}}
+.scen{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.scen.mine{border-color:var(--plan);background:var(--plan-soft)}
+.scen h3{display:flex;align-items:center;gap:8px}
+.scen h3 i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:.88rem}
+.row b{font-variant-numeric:tabular-nums}
+.verdict{font-size:.9rem;margin:0;padding:12px 14px;border-radius:10px;background:var(--accent-soft)}
+.analogy{font-size:.88rem;color:var(--muted);margin:0;max-width:75ch}
+
+/* Tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:.84rem;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);background:var(--bg);position:sticky;top:0}
+th:first-child,td:first-child{text-align:left}
+tr:last-child td{border-bottom:0}
+details>summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::after{content:"+";font-family:var(--f-display);font-size:1.2rem;color:var(--muted)}
+details[open]>summary::after{content:"–"}
+
+/* Inputs side */
+aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+.grp{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.grp[open] summary{margin-bottom:10px}
+.field{display:grid;grid-template-columns:minmax(0,1fr) 118px;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.field:first-of-type{border-top:0}
+.field label{font-size:.85rem;min-width:0}
+.field label small{display:block;color:var(--muted);font-size:.74rem;line-height:1.3}
+.inp{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--bg);overflow:hidden}
+.inp span{font-size:.75rem;color:var(--muted);padding:0 6px;white-space:nowrap}
+.inp input{width:100%;min-width:0;border:0;background:transparent;color:var(--ink);font:inherit;font-variant-numeric:tabular-nums;padding:7px 8px;text-align:right}
+.note{font-size:.78rem;color:var(--muted);margin:0}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Pig Profit Planner</h1>
+      <p>Project profit, cash and herd growth month by month. Every number below is an editable estimate; change it to match your farm.</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="saved" id="savedNote">Changes save on this device</span>
+      <button class="btn" id="resetBtn" type="button">Reset to defaults</button>
+    </div>
+  </header>
+
+  <section class="levers" aria-label="Main levers">
+    <div class="lever">
+      <div class="lever-top"><label for="keep">Gilts kept for breeding</label><output id="keepOut" class="num"></output></div>
+      <input type="range" id="keep" min="0" max="100" step="5">
+      <small>Share of young females you keep as future sows instead of selling. This is your reinvestment rate.</small>
+    </div>
+    <div class="lever">
+      <div class="lever-top"><label for="finish">Raised to finish</label><output id="finishOut" class="num"></output></div>
+      <input type="range" id="finish" min="0" max="100" step="5">
+      <small>Of the pigs you sell, how many you grow to slaughter weight. The rest are sold as weaners.</small>
+    </div>
+    <div class="lever">
+      <div class="lever-top"><label for="feedChange">Feed price change</label><output id="feedChangeOut" class="num"></output></div>
+      <input type="range" id="feedChange" min="-30" max="60" step="5">
+      <small>Test what happens if maize and soya prices rise or fall.</small>
+    </div>
+    <div class="lever">
+      <div class="lever-top"><label>Projection length</label><output id="horizonOut" class="num"></output></div>
+      <div class="seg" id="horizonSeg" role="group" aria-label="Projection length">
+        <button type="button" data-h="12">12 mo</button><button type="button" data-h="18">18 mo</button><button type="button" data-h="24">24 mo</button><button type="button" data-h="36">36 mo</button>
+      </div>
+      <small>You chose 1 to 2 years. Try 36 months to see compounding pick up speed.</small>
+    </div>
+  </section>
+
+  <div class="layout">
+    <main>
+      <div class="kpis" id="kpis"></div>
+      <div class="alerts" id="alerts"></div>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Compare: reinvest or sell everything</h2><p id="compareSub"></p></div>
+        <div class="compare" id="compare"></div>
+        <p class="verdict" id="verdict"></p>
+        <p class="analogy">Think of your sows as money in a savings account. Each litter is the interest. Selling every gilt spends all the interest. Keeping some reinvests it, so next year you have more sows earning for you. It starts slowly because a kept gilt takes about 10 months to give her first litter.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Cash in the bank</h2><p>Starts after paying for the house, equipment and sows</p></div>
+        <div class="legend"><span><i style="background:var(--plan)"></i>Your plan</span><span><i style="background:var(--alt)"></i>Sell everything</span></div>
+        <div class="chart-box"><canvas id="cashChart" aria-label="Cash balance by month"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Money in and out each month</h2><p>Your plan, excluding setup costs</p></div>
+        <div class="legend"><span><i style="background:var(--plan)"></i>Sales</span><span><i style="background:var(--cost)"></i>Running costs</span><span><i style="background:var(--accent)"></i>Profit</span></div>
+        <div class="chart-box"><canvas id="flowChart" aria-label="Monthly sales, costs and profit"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Herd on the farm</h2><p id="spaceSub"></p></div>
+        <div class="legend"><span><i style="background:var(--herd1)"></i>Breeding sows</span><span><i style="background:var(--herd2)"></i>Gilts growing up</span><span><i style="background:var(--herd3)"></i>Piglets with sows</span><span><i style="background:var(--herd4)"></i>Growers being finished</span></div>
+        <div class="chart-box"><canvas id="herdChart" aria-label="Herd numbers by month"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Year by year</h2><p>Your plan</p></div>
+        <div class="tbl-wrap"><table id="yearTbl"></table></div>
+      </section>
+
+      <details class="panel">
+        <summary><h2>Month by month detail</h2></summary>
+        <div class="tbl-wrap" style="max-height:480px;overflow:auto"><table id="monthTbl"></table></div>
+      </details>
+    </main>
+
+    <aside id="inputs" aria-label="Your numbers"></aside>
+  </div>
+</div>
+
+<script>
+const FIELDS = [
+  {g:"Prices", open:true, items:[
+    ["weanerPrice","Weaner price","per piglet at ~8 weeks","K",1100,50],
+    ["finisherPrice","Finished pig price","live, per pig (~90–100 kg)","K",5200,100],
+  ]},
+  {g:"Starting out", open:true, items:[
+    ["capital","Starting money","all cash you will put in","K",150000,1000],
+    ["building","Pig house build","20 m × 10 m house","K",90000,1000],
+    ["equipment","Equipment & first supplies","feeders, drinkers, heat lamps","K",10000,500],
+    ["startSows","In-pig sows bought","already pregnant","sows",5,1],
+    ["sowCost","Price per in-pig sow","improved breed","K",7500,100],
+    ["firstFarrow","Months until first litter","for the bought sows","mo",2,1],
+  ]},
+  {g:"Breeding (AI)", items:[
+    ["littersYear","Litters per sow per year","2.0 to 2.3 is typical","",2.2,0.1],
+    ["bornAlive","Piglets born alive per litter","","",10,0.5],
+    ["preWean","Piglet deaths before weaning","crushing, cold, scours","%",12,1],
+    ["finMort","Grower deaths while finishing","","%",3,1],
+    ["weanAge","Age piglets are weaned/sold","","mo",2,1],
+    ["finishMonths","Extra months to finish","weaning to slaughter","mo",4,1],
+    ["giltMonths","Kept gilt: weaning to first litter","bred at ~8 months old","mo",10,1],
+    ["aiCost","AI cost per litter","semen doses, catheters, repeats","K",900,50],
+  ]},
+  {g:"Feed (mix of bought & home-mixed)", items:[
+    ["feedSow","Per sow per month","~2.5 kg/day","K",650,10],
+    ["feedCreep","Creep feed per litter per month","while piglets nurse","K",250,10],
+    ["feedGilt","Per growing gilt per month","~2 kg/day","K",450,10],
+    ["feedFinisher","Per grower per month","weaning to slaughter","K",500,10],
+  ]},
+  {g:"Other costs", items:[
+    ["wage","Worker wage per month","","K",2000,100],
+    ["sowsPerWorker","Sows one worker can manage","adds a worker as herd grows","sows",25,1],
+    ["vetSow","Vet & medicine per sow per month","vaccines, dewormers","K",120,10],
+    ["vetPiglet","Vet per piglet born","iron injection, castration","K",50,5],
+    ["transWeaner","Transport per weaner sold","","K",30,5],
+    ["transFinisher","Transport per finished pig","to buyer or abattoir","K",150,10],
+    ["other","Other monthly costs","water, electricity, phone","K",0,50],
+  ]},
+  {g:"Herd value & space", items:[
+    ["sowValue","Value of a breeding sow","for 'cash + pigs' total","K",7000,100],
+    ["giltValue","Value of a growing gilt","","K",4000,100],
+    ["houseArea","Pig house floor area","20 × 10 m","m²",200,10],
+  ]},
+];
+const LEVERS = {keep:10, finish:60, feedChange:0, horizon:24};
+const DEFAULTS = {...LEVERS};
+FIELDS.forEach(g=>g.items.forEach(f=>DEFAULTS[f[0]]=f[4]));
+const KEY="pig-profit-planner-v1";
+let P = {...DEFAULTS};
+try{ const s=JSON.parse(localStorage.getItem(KEY)||"null"); if(s) P={...DEFAULTS,...s}; }catch(e){}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(P)); }catch(e){} }
+
+const fmtK = v => (v<0?"−":"")+"K"+Math.round(Math.abs(v)).toLocaleString("en-US");
+const fmtN = v => Math.round(v).toLocaleString("en-US");
+const $ = id => document.getElementById(id);
+
+/* ---------- Build inputs ---------- */
+const aside=$("inputs");
+aside.innerHTML = '<h2 style="padding:0 2px">Your numbers</h2>' + FIELDS.map(g=>`
+  <details class="grp"${g.open?" open":""}><summary><h3>${g.g}</h3></summary>
+  ${g.items.map(([id,l,hint,unit,_,step])=>`
+    <div class="field"><label for="${id}">${l}${hint?`<small>${hint}</small>`:""}</label>
+    <div class="inp">${unit==="K"?"<span>K</span>":""}<input id="${id}" type="number" inputmode="decimal" step="${step}" min="0">${unit&&unit!=="K"?`<span>${unit}</span>`:""}</div></div>`).join("")}
+  </details>`).join("") + '<p class="note">Defaults are rough Zambian estimates for late 2026. Replace them with real quotes from your feed supplier, AI provider and buyers.</p>';
+
+function syncInputs(){
+  FIELDS.forEach(g=>g.items.forEach(([id])=>{ $(id).value=P[id]; }));
+  ["keep","finish","feedChange"].forEach(id=>$(id).value=P[id]);
+  document.querySelectorAll("#horizonSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.h===P.horizon)));
+}
+FIELDS.forEach(g=>g.items.forEach(([id])=>{
+  $(id).addEventListener("input",e=>{ const v=parseFloat(e.target.value); if(!isNaN(v)){P[id]=v; save(); run();} });
+}));
+["keep","finish","feedChange"].forEach(id=>$(id).addEventListener("input",e=>{P[id]=+e.target.value; save(); run();}));
+document.querySelectorAll("#horizonSeg button").forEach(b=>b.addEventListener("click",()=>{P.horizon=+b.dataset.h; save(); syncInputs(); run();}));
+$("resetBtn").addEventListener("click",()=>{ P={...DEFAULTS}; save(); syncInputs(); run(); $("savedNote").textContent="Defaults restored"; setTimeout(()=>$("savedNote").textContent="Changes save on this device",2000); });
+
+/* ---------- Simulation ---------- */
+function simulate(p, keepPct){
+  const keep=keepPct/100, fin=p.finish/100, ff=1+p.feedChange/100;
+  const interval = 12/Math.max(0.5,p.littersYear);
+  const setup = p.building + p.equipment + p.startSows*p.sowCost;
+  let cash = p.capital - setup;
+  let cohorts=[{n:p.startSows, next:Math.max(1,p.firstFarrow), first:true}];
+  let nursing=[], growers=[], gilts=[];
+  const rows=[{m:0, cash, rev:0, cost:0, profit:0, sows:p.startSows, giltN:0, nursingPig:0, growN:0, worth:cash+p.startSows*p.sowValue}];
+  for(let m=1;m<=p.horizon;m++){
+    let rev=0, feed=0, ai=0, vet=0, transport=0, litters=0, born=0, weanSold=0, finSold=0, kept=0;
+    gilts = gilts.filter(g=>{ if(g.at<=m){ cohorts.push({n:g.n, next:m, first:false}); return false;} return true; });
+    for(const c of cohorts){
+      if(c.next < m+1){
+        litters+=c.n; const b=c.n*p.bornAlive; born+=b;
+        nursing.push({n:b*(1-p.preWean/100), litters:c.n, at:m+Math.max(1,p.weanAge)});
+        if(!c.first) ai+=c.n*p.aiCost;
+        c.first=false; c.next+=interval;
+      }
+    }
+    vet += born*p.vetPiglet;
+    nursing = nursing.filter(x=>{
+      if(x.at<=m){
+        const k=x.n*0.5*keep, rest=x.n-k, toFinish=rest*fin, sell=rest-toFinish;
+        rev+=sell*p.weanerPrice; transport+=sell*p.transWeaner; weanSold+=sell; kept+=k;
+        if(toFinish>0) growers.push({n:toFinish*(1-p.finMort/100), at:m+Math.max(1,p.finishMonths)});
+        if(k>0) gilts.push({n:k, at:m+Math.max(1,p.giltMonths)});
+        return false;
+      } return true;
+    });
+    growers = growers.filter(g=>{
+      if(g.at<=m){ rev+=g.n*p.finisherPrice; transport+=g.n*p.transFinisher; finSold+=g.n; return false; } return true;
+    });
+    const sows=cohorts.reduce((a,c)=>a+c.n,0);
+    const nursingLitters=nursing.reduce((a,x)=>a+x.litters,0);
+    const nursingPig=nursing.reduce((a,x)=>a+x.n,0);
+    const giltN=gilts.reduce((a,g)=>a+g.n,0);
+    const growN=growers.reduce((a,g)=>a+g.n,0);
+    feed = (sows*p.feedSow + nursingLitters*p.feedCreep + giltN*p.feedGilt + growN*p.feedFinisher)*ff;
+    vet += sows*p.vetSow;
+    const workers=Math.max(1,Math.ceil(sows/Math.max(1,p.sowsPerWorker)));
+    const labour=workers*p.wage;
+    const cost=feed+ai+vet+transport+labour+p.other;
+    const profit=rev-cost; cash+=profit;
+    const pigValue = sows*p.sowValue + giltN*p.giltValue + growN*p.weanerPrice + nursingPig*p.weanerPrice*0.5;
+    const space = sows*5 + giltN*1.5 + growN*1.0;
+    rows.push({m,rev,cost,profit,cash,feed,ai,vet,transport,labour,sows,giltN,nursingPig,growN,litters,born,weanSold,finSold,kept,workers,pigValue,worth:cash+pigValue,space});
+  }
+  const ops=rows.slice(1);
+  const sum=k=>ops.reduce((a,r)=>a+r[k],0);
+  let minCash=Infinity,minM=0; rows.forEach(r=>{ if(r.cash<minCash){minCash=r.cash;minM=r.m;} });
+  const pay=ops.find(r=>r.cash>=p.capital);
+  const last=rows[rows.length-1];
+  return {rows, setup, rev:sum("rev"), cost:sum("cost"), profit:sum("profit"), sold:sum("weanSold")+sum("finSold"),
+    minCash, minM, payback: pay?pay.m:null, last, peakSpace:Math.max(...ops.map(r=>r.space)), keptTotal:sum("kept")};
+}
+
+/* ---------- Charts ---------- */
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let charts={};
+function baseOpts(stacked){
+  const grid=css("--line"), tick=css("--muted");
+  return {responsive:true, maintainAspectRatio:false, animation:false, interaction:{mode:"index",intersect:false},
+    plugins:{legend:{display:false}, tooltip:{callbacks:{}}},
+    scales:{x:{stacked, grid:{display:false}, ticks:{color:tick, maxRotation:0, autoSkip:true, maxTicksLimit:12}, title:{display:true,text:"Month",color:tick}},
+            y:{stacked, grid:{color:grid}, border:{display:false}, ticks:{color:tick}}}};
+}
+const kTick = v => Math.abs(v)>=1000 ? (v<0?"−":"")+"K"+Math.round(Math.abs(v)/1000)+"k" : "K"+v;
+function buildCharts(){
+  Object.values(charts).forEach(c=>c.destroy());
+  Chart.defaults.font.family = css("--f-body") || "system-ui";
+  Chart.defaults.color = css("--muted");
+  const o1=baseOpts(false); o1.scales.y.ticks.callback=kTick;
+  o1.plugins.tooltip.callbacks.label=c=>`${c.dataset.label}: ${fmtK(c.parsed.y)}`;
+  charts.cash=new Chart($("cashChart"),{type:"line",data:{labels:[],datasets:[
+    {label:"Your plan",data:[],borderColor:css("--plan"),backgroundColor:css("--plan-soft"),fill:"origin",borderWidth:2.5,pointRadius:0,tension:.25},
+    {label:"Sell everything",data:[],borderColor:css("--alt"),borderDash:[6,4],borderWidth:2,pointRadius:0,tension:.25,fill:false}]},options:o1});
+  const o2=baseOpts(false); o2.scales.y.ticks.callback=kTick;
+  o2.plugins.tooltip.callbacks.label=c=>`${c.dataset.label}: ${fmtK(c.parsed.y)}`;
+  charts.flow=new Chart($("flowChart"),{type:"bar",data:{labels:[],datasets:[
+    {type:"line",label:"Profit",data:[],borderColor:css("--accent"),backgroundColor:css("--accent"),borderWidth:2,pointRadius:2,tension:.2,order:0},
+    {label:"Sales",data:[],backgroundColor:css("--plan"),borderRadius:3,order:1},
+    {label:"Running costs",data:[],backgroundColor:css("--cost"),borderRadius:3,order:2}]},options:o2});
+  const o3=baseOpts(true); o3.plugins.tooltip.callbacks.label=c=>`${c.dataset.label}: ${fmtN(c.parsed.y)}`;
+  const area=(label,v)=>({label,data:[],backgroundColor:css(v),borderColor:css(v),fill:true,pointRadius:0,borderWidth:1,tension:.2});
+  charts.herd=new Chart($("herdChart"),{type:"line",data:{labels:[],datasets:[
+    area("Breeding sows","--herd1"),area("Gilts growing up","--herd2"),area("Piglets with sows","--herd3"),area("Growers being finished","--herd4")]},options:o3});
+}
+
+/* ---------- Render ---------- */
+function kpi(label,val,sub,cls=""){return `<div class="kpi"><span class="k-label">${label}</span><span class="k-val num ${cls}">${val}</span><span class="k-sub">${sub}</span></div>`}
+function run(){
+  ["keep","finish"].forEach(id=>$(id+"Out").textContent=P[id]+"%");
+  $("feedChangeOut").textContent=(P.feedChange>0?"+":"")+P.feedChange+"%";
+  $("horizonOut").textContent=P.horizon+" months";
+  const A=simulate(P,P.keep), B=simulate(P,0), H=P.horizon, L=A.last;
+
+  $("kpis").innerHTML =
+    kpi(`Cash at month ${H}`, fmtK(L.cash), `Started with ${fmtK(P.capital)}`, L.cash<0?"neg":"") +
+    kpi("Cash + value of pigs", fmtK(L.worth), `${fmtK(L.pigValue)} is in pigs`) +
+    kpi("Breeding sows at end", fmtN(L.sows), `Up from ${P.startSows}. ${fmtN(L.giltN)} gilts still growing`) +
+    kpi("Operating profit", fmtK(A.profit), `Sales ${fmtK(A.rev)} − costs ${fmtK(A.cost)}`, A.profit<0?"neg":"pos") +
+    kpi("Lowest cash point", fmtK(A.minCash), A.minM===0?"Right after setup":`In month ${A.minM}`, A.minCash<0?"neg":"") +
+    kpi("Pigs sold", fmtN(A.sold), `${fmtN(A.rows.reduce((a,r)=>a+(r.weanSold||0),0))} weaners, ${fmtN(A.rows.reduce((a,r)=>a+(r.finSold||0),0))} finished`);
+
+  const usable=P.houseArea*0.75, pct=A.peakSpace/usable*100, al=[];
+  if(A.minCash<0) al.push(`<span class="chip bad">Cash runs out in month ${A.rows.find(r=>r.cash<0).m}. Add money, sell more as weaners, or keep fewer gilts.</span>`);
+  else if(A.minCash<P.capital*0.1) al.push(`<span class="chip warn">Cash gets tight: lowest is ${fmtK(A.minCash)} in month ${A.minM}</span>`);
+  else al.push(`<span class="chip ok">Cash never runs out over ${H} months</span>`);
+  al.push(A.payback?`<span class="chip ok">All starting money back by month ${A.payback}</span>`:`<span class="chip warn">Starting money not yet fully back in cash within ${H} months</span>`);
+  if(pct>100) al.push(`<span class="chip bad">House over capacity: needs ~${fmtN(A.peakSpace)} m² of ${fmtN(usable)} m² usable. Plan another pen.</span>`);
+  else if(pct>80) al.push(`<span class="chip warn">House ${Math.round(pct)}% full at peak. Plan expansion soon.</span>`);
+  $("alerts").innerHTML=al.join("");
+  $("spaceSub").textContent=`Peak space use ${fmtN(A.peakSpace)} m² of ~${fmtN(usable)} m² usable (75% of floor)`;
+
+  const scen=(name,col,S,mine)=>`<div class="scen${mine?" mine":""}"><h3><i style="background:${col}"></i>${name}</h3>
+    <div class="row"><span>Cash at month ${H}</span><b>${fmtK(S.last.cash)}</b></div>
+    <div class="row"><span>Value of pigs on farm</span><b>${fmtK(S.last.pigValue)}</b></div>
+    <div class="row"><span>Cash + pigs</span><b>${fmtK(S.last.worth)}</b></div>
+    <div class="row"><span>Breeding sows</span><b>${fmtN(S.last.sows)} (+${fmtN(S.last.giltN)} gilts)</b></div>
+    <div class="row"><span>Lowest cash</span><b>${fmtK(S.minCash)}</b></div></div>`;
+  $("compareSub").textContent=`Same prices and costs, different keep rate`;
+  $("compare").innerHTML=scen(`Your plan: keep ${P.keep}% of gilts`,"var(--plan)",A,true)+scen("Sell everything: keep 0%","var(--alt)",B,false);
+  const dCash=A.last.cash-B.last.cash, dWorth=A.last.worth-B.last.worth;
+  $("verdict").innerHTML = P.keep===0 ? "Move the <b>Gilts kept for breeding</b> slider above 0% to see how reinvesting compares."
+    : `Keeping ${P.keep}% of gilts leaves you <b>${fmtK(Math.abs(dCash))} ${dCash<0?"less":"more"} cash</b> but <b>${fmtK(Math.abs(dWorth))} ${dWorth>=0?"more":"less"} in cash + pigs</b> at month ${H}, with <b>${fmtN(A.last.sows-B.last.sows)} extra sows</b> earning from then on.`;
+
+  const labels=A.rows.map(r=>r.m);
+  charts.cash.data.labels=labels; charts.cash.data.datasets[0].data=A.rows.map(r=>r.cash); charts.cash.data.datasets[1].data=B.rows.map(r=>r.cash); charts.cash.update();
+  const ops=A.rows.slice(1);
+  charts.flow.data.labels=ops.map(r=>r.m);
+  charts.flow.data.datasets[0].data=ops.map(r=>r.profit); charts.flow.data.datasets[1].data=ops.map(r=>r.rev); charts.flow.data.datasets[2].data=ops.map(r=>-r.cost); charts.flow.update();
+  charts.herd.data.labels=labels;
+  ["sows","giltN","nursingPig","growN"].forEach((k,i)=>charts.herd.data.datasets[i].data=A.rows.map(r=>Math.round(r[k]*10)/10));
+  charts.herd.update();
+
+  // Year table
+  let yt=`<thead><tr><th>Year</th><th>Sales</th><th>Feed</th><th>Labour</th><th>AI, vet & transport</th><th>Profit</th><th>Cash at end</th><th>Sows at end</th></tr></thead><tbody>`;
+  for(let y=0;y*12<H;y++){
+    const rs=ops.filter(r=>r.m>y*12&&r.m<=(y+1)*12); if(!rs.length) break;
+    const s=k=>rs.reduce((a,r)=>a+r[k],0), e=rs[rs.length-1];
+    const label = rs.length<12?`Year ${y+1} (${rs.length} mo)`:`Year ${y+1}`;
+    yt+=`<tr><td>${label}</td><td>${fmtK(s("rev"))}</td><td>${fmtK(s("feed"))}</td><td>${fmtK(s("labour"))}</td><td>${fmtK(s("ai")+s("vet")+s("transport"))}</td><td class="${s("profit")<0?"neg":"pos"}">${fmtK(s("profit"))}</td><td>${fmtK(e.cash)}</td><td>${fmtN(e.sows)}</td></tr>`;
+  }
+  yt+=`<tr><td>Setup (month 0)</td><td>–</td><td colspan="4">House, equipment and ${P.startSows} sows</td><td class="neg">${fmtK(-A.setup)}</td><td></td></tr></tbody>`;
+  $("yearTbl").innerHTML=yt;
+
+  let mt=`<thead><tr><th>Month</th><th>Sows</th><th>Litters</th><th>Weaners sold</th><th>Finished sold</th><th>Gilts kept</th><th>Money in</th><th>Money out</th><th>Profit</th><th>Cash</th></tr></thead><tbody>`;
+  mt+=`<tr><td>0 (setup)</td><td>${P.startSows}</td><td>–</td><td>–</td><td>–</td><td>–</td><td>${fmtK(P.capital)}</td><td>${fmtK(A.setup)}</td><td>–</td><td>${fmtK(A.rows[0].cash)}</td></tr>`;
+  ops.forEach(r=>{ mt+=`<tr><td>${r.m}</td><td>${fmtN(r.sows)}</td><td>${r.litters?fmtN(r.litters):"–"}</td><td>${r.weanSold?fmtN(r.weanSold):"–"}</td><td>${r.finSold?fmtN(r.finSold):"–"}</td><td>${r.kept?fmtN(r.kept):"–"}</td><td>${fmtK(r.rev)}</td><td>${fmtK(r.cost)}</td><td class="${r.profit<0?"neg":"pos"}">${fmtK(r.profit)}</td><td class="${r.cash<0?"neg":""}">${fmtK(r.cash)}</td></tr>`; });
+  $("monthTbl").innerHTML=mt+"</tbody>";
+}
+
+syncInputs();
+function start(){ if(window.Chart){ buildCharts(); } else { charts={cash:{data:{datasets:[{},{}]},update(){}},flow:{data:{datasets:[{},{},{}]},update(){}},herd:{data:{datasets:[{},{},{},{}]},update(){}}}; } run(); }
+start();
+const rebuild=()=>{ if(window.Chart){ buildCharts(); run(); } };
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",rebuild); }catch(e){}
+new MutationObserver(rebuild).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+</script>
